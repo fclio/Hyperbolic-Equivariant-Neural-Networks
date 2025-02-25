@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+*/__pycache__/
+*.py[cod]
+*$py.class
+
+*data/
+*output/
+*.pth
+*.idea/
+*.idea/misc.xml
+*.pyc
+*.tar
+
+*.m
+*.gz
+*.html
+
+*code/classification/output
+*code/classification/data
+*code/data/
+*code/slurm_output/
+
+*slurm_output/
+
+

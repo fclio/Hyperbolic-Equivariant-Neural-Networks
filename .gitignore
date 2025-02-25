@@ -1,0 +1,7 @@
+# Ignore everything
+/*
+
+# Except folder1 and folder2
+!HyperbolicCV/
+
+!.gitignore
