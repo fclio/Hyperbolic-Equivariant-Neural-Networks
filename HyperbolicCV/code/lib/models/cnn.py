@@ -14,6 +14,11 @@ from lib.lorentz.layers import (
 from groupy.gconv.pytorch_gconv.pooling import global_max_pooling
 from groupy.gconv.pytorch_gconv import P4ConvZ2, P4ConvP4, P4MConvZ2, P4MConvP4M
 
+from lib.lorentz_equivariant.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+from lib.lorentz_equivariant.layers.LBnorm import GroupLorentzBatchNorm2d
+from lib.lorentz_equivariant.layers.LModules import GroupLorentzGlobalAvgPool2d
+
+
 equivariant_num = {
     "P4M": 8,
     "P4": 4
@@ -75,7 +80,11 @@ class CNN(nn.Module):
         # Shape: [batch, 16, 16, 65]
         # equivariant: [batch, 64, 8, 16, 16]
         # print("shape 1:", x.shape)
+        # print("layer 1", x.shape)
+        # layer 1 torch.Size([128, 8, 16, 16, 65])
 
+        
+        # dede
         x = self.activation(self.bn2(self.conv2(x)))  
         # Shape: [batch, 8, 8, 129]
         # equivariant: [batch, 128, 8, 8, 8]
@@ -85,12 +94,12 @@ class CNN(nn.Module):
         # Shape: [batch, 4, 4, 257]
         # equivariant: [batch, 256, 8, 4, 4]
         # print("shape 3:", x.shape)
-
+        sdedede
         x = self.activation(self.bn4(self.conv4(x)))  
         # Shape: [batch, 2, 2, 513]
         # equivariant: [batch, 512, 8, 2, 2]
         # print("shape 4:", x.shape)
-
+ 
         x = self.pooling(x)  # Global Pooling in Lorentz space
         # Shape: [batch, 1, 1, 513]
         # equivariant: [batch, 512, 8, 1, 1]
@@ -127,14 +136,17 @@ class CNN(nn.Module):
     
     def _get_GlobalAveragePooling(self):
 
-        if self.eq_type is not None:
-            return global_max_pooling
-        
-        elif self.manifold is None:
-            return nn.AdaptiveAvgPool2d((1, 1))
+        if self.manifold is None:
+            if self.eq_type is not None:
+                return global_max_pooling
+            else:
+                return nn.AdaptiveAvgPool2d((1, 1))
 
         elif type(self.manifold) is CustomLorentz:
-            return LorentzGlobalAvgPool2d(self.manifold, keep_dim=True)
+            if self.eq_type is not None:
+                return GroupLorentzGlobalAvgPool2d(self.manifold, keep_dim=True)
+            else:
+                return LorentzGlobalAvgPool2d(self.manifold, keep_dim=True)
 
         else:
             raise RuntimeError(f"Manifold {type(self.manifold)} not supported in ResNet.")
@@ -173,6 +185,31 @@ class CNN(nn.Module):
                 )
 
         elif type(self.manifold) is CustomLorentz:
+            if self.eq_type is not None:
+                # if self.eq_type =="P4":
+                    # if in_channels == self.img_dim[0]:  # First layer operates on Z2 input
+                    #     return P4ConvZ2(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+                    # else:  # Deeper layers operate on P4 feature maps
+                    #     return P4ConvP4(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
+                if self.eq_type =="P4M":
+                    if in_channels == self.img_dim[0]:  # First layer operates on Z2 input
+                        return LorentzP4MConvZ2(manifold=self.manifold, 
+                                in_channels=in_channels+1, 
+                                out_channels=out_channels+1, 
+                                kernel_size=kernel_size, 
+                                stride=stride, 
+                                padding=padding, 
+                                bias=bias, 
+                                LFC_normalize=LFC_normalize)
+                    else:  # Deeper layers operate on P4 feature maps
+                        return LorentzP4MConvP4M(manifold=self.manifold, 
+                                in_channels=in_channels+1, 
+                                out_channels=out_channels+1, 
+                                kernel_size=kernel_size, 
+                                stride=stride, 
+                                padding=padding, 
+                                bias=bias, 
+                                LFC_normalize=LFC_normalize)
             return LorentzConv2d(
                 manifold=self.manifold, 
                 in_channels=in_channels+1, 
@@ -185,16 +222,23 @@ class CNN(nn.Module):
             )
 
     def get_BatchNorm2d(self, num_channels):
-        if self.eq_type is not None:
-            if self.eq_type =="P4M":
-                return nn.BatchNorm3d(num_channels)
-            if self.eq_type =="P4":
-                return nn.BatchNorm3d(num_channels)
-        elif self.manifold is None:
-            return nn.BatchNorm2d(num_channels)
+        
+        if self.manifold is None:
+            if self.eq_type is not None:
+                if self.eq_type =="P4M":
+                    return nn.BatchNorm3d(num_channels)
+                if self.eq_type =="P4":
+                    return nn.BatchNorm3d(num_channels)
+            else:
+             return nn.BatchNorm2d(num_channels)
 
         elif type(self.manifold) is CustomLorentz:
-            return LorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1)
+                
+            if self.eq_type is not None:
+                if self.eq_type =="P4M":
+                    return GroupLorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1)
+            else:
+                return LorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1)
 
     def get_Activation(self):
         if self.manifold is None:
@@ -203,20 +247,24 @@ class CNN(nn.Module):
             return LorentzReLU(self.manifold)
 
 
-def EUCLIDEAN_CNN(manifold= None,
-                 img_dim=[3, 32, 32], embed_dim=512,
-                 num_classes=100, remove_linear=False,type=None):
+def EUCLIDEAN_CNN(img_dim=[3, 32, 32], embed_dim=512,
+                 num_classes=100, remove_linear=False):
     model = CNN(img_dim=img_dim, embed_dim=embed_dim, num_classes=num_classes, remove_linear=remove_linear)
     return model
 
-def Lorentz_CNN(manifold= None,
-                 img_dim=[3, 32, 32], embed_dim=512,
-                 num_classes=100, remove_linear=False,type=None):
+def Lorentz_CNN(k=1, learn_k=False, img_dim=[3, 32, 32], embed_dim=512,
+                 num_classes=100, remove_linear=False):
+    manifold = CustomLorentz(k=k, learnable=learn_k)
     model = CNN(manifold,img_dim=img_dim, embed_dim=embed_dim, num_classes=num_classes, remove_linear=remove_linear)
     return model
 
-def equivariant_CNN(manifold= None,
-                 img_dim=[3, 32, 32], embed_dim=512,
+def equivariant_CNN(img_dim=[3, 32, 32], embed_dim=512,
                  num_classes=100, remove_linear=False,eq_type=None):
     model = CNN(img_dim=img_dim, embed_dim=embed_dim, num_classes=num_classes, remove_linear=remove_linear,eq_type=eq_type)
+    return model
+
+def Lorentz_equivariant_CNN(k=1, learn_k=False, img_dim=[3, 32, 32], embed_dim=512,
+                 num_classes=100, remove_linear=False,eq_type=None):
+    manifold = CustomLorentz(k=k, learnable=learn_k)
+    model = CNN(manifold,img_dim=img_dim, embed_dim=embed_dim, num_classes=num_classes, remove_linear=remove_linear,eq_type=eq_type)
     return model

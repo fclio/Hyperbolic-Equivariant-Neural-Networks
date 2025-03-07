@@ -34,4 +34,4 @@ decoder_manifold = equivariant
 equivariant_type = P4M
 
 # Dataset settings
-dataset = CIFAR-10 # CIFAR-10 or Tiny-ImageNet
+# dataset = CIFAR-10 # CIFAR-10 or Tiny-ImageNet

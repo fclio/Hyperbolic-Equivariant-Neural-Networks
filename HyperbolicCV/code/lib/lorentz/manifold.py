@@ -80,7 +80,10 @@ class CustomLorentz(Lorentz):
 
     def lorentz_activation(self, x: torch.Tensor, activation, add_time: bool=True) -> torch.Tensor:
         """ Implements activation directly on the manifold. """
-        x = activation(x.narrow(-1, 1, x.shape[-1] - 1))
+        
+        xs = x.narrow(-1, 1, x.shape[-1] - 1)
+        # performs slicing along the last dimension (-1, meaning the channel dimension C)
+        x = activation(xs)
         if add_time:
             x = self.add_time(x)
         return x

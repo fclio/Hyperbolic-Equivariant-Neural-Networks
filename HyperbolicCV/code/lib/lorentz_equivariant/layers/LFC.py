@@ -2,23 +2,47 @@ import torch
 import torch.nn as nn
 
 from lib.lorentz.manifold import CustomLorentz
+from groupy.gconv.make_gconv_indices import *
+make_indices_functions = {(1, 4): make_c4_z2_indices,
+                          (4, 4): make_c4_p4_indices,
+                          (1, 8): make_d4_z2_indices,
+                          (8, 8): make_d4_p4m_indices}
+
+def trans_filter(w, inds):
+    
+    #  self.weight: torch.Size([64, 1, 1, 3, 3])
+    #  (out_channels, in_channels, input_stabilizer_size, kernel_size, kernel_size)
+    #  self.inds: (8, 1, 3, 3, 3)
+    #  (num_group_transformation, input_stabilizer_size, kernel_size, kernel_size, 3)
+       
+    inds_reshape = inds.reshape((-1, inds.shape[-1])).astype(np.int64)
+    # indeces: (8 * 1 * 3 * 3, 3) = (72, 3)
+    # Each row contains a (T, U, V) triplet that maps a pixel from the original kernel to a transformed version.
+
+    #  step 2: this remaps the filter weights based on the transformation indices.
+    # !!! here is a special index finding will become w(:,:, len(n-dimension_list matching follow select base on index))
+    w_indexed = w[:, :, inds_reshape[:, 0].tolist(), inds_reshape[:, 1].tolist(), inds_reshape[:, 2].tolist()]
+    # Extracts transformed filter pixels using (T, U, V) from w
+    # w_indexed.shape = (64, 1, 72) (since 72 = 8 * 1 * 3 * 3)
+    # (out_channels, in_channels, num_group_transformation * input_stabilizer_size * kernel_size * kernel_size)
+
+    w_indexed = w_indexed.view(w_indexed.size()[0], w_indexed.size()[1],
+                                    inds.shape[0], inds.shape[1], inds.shape[2], inds.shape[3])
+    # torch.Size([64, 1, 8, 1, 3, 3])
+    # (out_channels, in_channels, num_group_transformation, input_stabilizer_size, kernel_size, kernel_size)
 
 
-# fully connected layer (like a regular nn.Linear layer) but operates in a Lorentzian manifold.
-class LorentzFullyConnected(nn.Module):
-    """
-        Modified Lorentz fully connected layer of Chen et al. (2022).
+    w_transformed = w_indexed.permute(0, 2, 1, 3, 4, 5)
+    #  torch.Size([64, 8, 1, 1, 3, 3])
+    # (out_channels, num_group_transformation, in_channels, input_stabilizer_size, kernel_size, kernel_size)
+    
 
-        Code modified from https://github.com/chenweize1998/fully-hyperbolic-nn
+    # Ensures that the tensor is stored contiguously in memory
+    # This improves efficiency for PyTorch computations
+    return w_transformed.contiguous()
 
-        args:
-            manifold: Instance of Lorentz manifold
-            in_features, out_features, bias: Same as nn.Linear
-            init_scale: Scale parameter for internal normalization
-            learn_scale: If scale parameter should be learnable
-            normalize: If internal normalization should be applied
-    """
 
+class GroupLorentzFullyConnected(nn.Module):
     def __init__(
             self,
             manifold: CustomLorentz,
@@ -29,25 +53,43 @@ class LorentzFullyConnected(nn.Module):
             learn_scale=False,
             normalize=False
         ):
-        super(LorentzFullyConnected, self).__init__()
+        super(GroupLorentzFullyConnected, self).__init__()
         self.manifold = manifold
         self.in_features = in_features
         self.out_features = out_features
         self.bias = bias
         self.normalize = normalize
 
-        # might need to change!!!
-        self.weight = nn.Linear(self.in_features, self.out_features, bias=bias)
+        # might need to change here!!!
+        # get this to reshape into kernel, kernel through self.weight.data
+        # then apply the transformation
+        # then flatten them into nn.Linear(self.in_features, self.out_features * num_group, bias=bias)
+        # so i can pass all patches in as regular and get them out as self.out_features * num_group then .view(out_feature, num_group)
+        # hint: some fold unfold operation
+        # lin_features = ((self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]) + 1
+        
+        self.weight = nn.Linear(self.in_features, self.out_features , bias=bias)
         # This layer will perform a standard matrix multiplication during the forward pass
-
+        # liner.weight = torch.Size([65, 10])
+        print("weight",self.weight.weight.shape)
+        dedes
         self.init_std = 0.02
         self.reset_parameters()
+        # start here after initiaztion!!!!
+        self.inds = self.make_transformation_indices()
+        self.weight.data.view(...,...,....)
+        
+        # ......
+        
 
         # Scale for internal normalization
         if init_scale is not None:
             self.scale = nn.Parameter(torch.ones(()) * init_scale, requires_grad=learn_scale)
         else:
             self.scale = nn.Parameter(torch.ones(()) * 2.3, requires_grad=learn_scale)
+    def make_transformation_indices(self):
+        # to understand later!
+        return make_indices_functions[(self.input_stabilizer_size, self.output_stabilizer_size)](self.ksize)
 
     def forward(self, x):
         # Linear Transformation 

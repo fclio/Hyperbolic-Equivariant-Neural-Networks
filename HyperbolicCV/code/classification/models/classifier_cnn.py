@@ -8,13 +8,14 @@ from lib.geoopt.manifolds.stereographic import PoincareBall
 from lib.lorentz.layers import LorentzMLR
 from lib.poincare.layers import UnidirectionalPoincareMLR
 
-from lib.models.cnn import Lorentz_CNN, EUCLIDEAN_CNN, equivariant_CNN  # Ensure this is correctly implemented
+from lib.models.cnn import Lorentz_CNN, EUCLIDEAN_CNN, equivariant_CNN,  Lorentz_equivariant_CNN # Ensure this is correctly implemented
 
 # Define CNN model dictionary
 CNN_MODEL = {
     "lorentz": Lorentz_CNN,  # Ensure LorentzCNN is defined correctly
     "euclidean" : EUCLIDEAN_CNN,
     "equivariant" : equivariant_CNN,
+    "lorentz_equivariant": Lorentz_equivariant_CNN,
 }
 
 # Define decoder mappings
@@ -33,9 +34,11 @@ class CNNClassifier(nn.Module):
         # Initialize Encoder (CNN)
         if enc_type not in CNN_MODEL:
             raise ValueError(f"Unknown encoder type: {enc_type}")
-        self.manifold = CustomLorentz(k=enc_kwargs['k'], learnable=enc_kwargs['learn_k']) if enc_type == "lorentz" else None
-        self.encoder = CNN_MODEL[enc_type](self.manifold, img_dim=enc_kwargs['img_dim'], embed_dim=enc_kwargs['embed_dim'], num_classes=enc_kwargs['num_classes'], remove_linear=True,type=enc_kwargs['type'])
-        self.enc_manifold = self.encoder.manifold if enc_type == "lorentz" else None
+        # self.manifold = CustomLorentz(k=enc_kwargs['k'], learnable=enc_kwargs['learn_k']) if enc_type == "lorentz" else None
+        # self.encoder = CNN_MODEL[enc_type](self.manifold, img_dim=enc_kwargs['img_dim'], embed_dim=enc_kwargs['embed_dim'], num_classes=enc_kwargs['num_classes'], remove_linear=True,eq_type=enc_kwargs['eq_type'])
+        self.encoder = CNN_MODEL[enc_type](remove_linear=True, **enc_kwargs)
+        
+        self.enc_manifold = self.encoder.manifold if (enc_type == "lorentz" or enc_type == "lorentz_equivariant" ) else None
 
         # Initialize Decoder
         self.dec_manifold = None
@@ -43,7 +46,7 @@ class CNNClassifier(nn.Module):
             self.decoder = EUCLIDEAN_DECODER[dec_kwargs['type']](
                 dec_kwargs['embed_dim'], dec_kwargs['num_classes']
             )
-        elif dec_type == "lorentz":
+        elif dec_type == "lorentz" or dec_type == "lorentz_equivariant":
             self.dec_manifold = CustomLorentz(
                 k=dec_kwargs["k"], learnable=dec_kwargs.get('learn_k', False)
             )

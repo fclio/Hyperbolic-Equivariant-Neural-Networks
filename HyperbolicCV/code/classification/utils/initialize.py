@@ -83,13 +83,18 @@ def select_model(img_dim, num_classes, args):
             'img_dim' : img_dim,
             'embed_dim' : args.embedding_dim,
             'num_classes' : num_classes,
-            'bias' : args.encoder_manifold=="lorentz"
+            # 'bias' : args.encoder_manifold=="lorentz"
         }
 
         if args.encoder_manifold=="lorentz":
             enc_args['learn_k'] = args.learn_k
             enc_args['k'] = args.encoder_k
         elif args.encoder_manifold=="equivariant":
+            enc_args["eq_type"] = args.equivariant_type
+            
+        elif args.encoder_manifold=="lorentz_equivariant":
+            enc_args['learn_k'] = args.learn_k
+            enc_args['k'] = args.encoder_k
             enc_args["eq_type"] = args.equivariant_type
 
         dec_args = {
@@ -217,6 +222,27 @@ def select_dataset(args, validation_split=False):
 
         img_dim = [1, 32, 32]
         num_classes = 10
+        
+    elif args.dataset == 'MNIST_rot':
+        
+        train_transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize((32,32), antialias=None)
+        ])
+        
+        test_transform=transforms.Compose([
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Resize((32,32), antialias=None)
+        ])
+
+        train_set = datasets.MNIST('data', train=True, download=True, transform=train_transform)
+        if validation_split:
+            train_set, val_set = torch.utils.data.random_split(train_set, [50000, 10000], generator=torch.Generator().manual_seed(1))
+        test_set = datasets.MNIST('data', train=False, download=True, transform=test_transform)
+
+        img_dim = [1, 32, 32]
+        num_classes = 10
 
     elif args.dataset == 'CIFAR-10':
         train_transform=transforms.Compose([
@@ -238,6 +264,27 @@ def select_dataset(args, validation_split=False):
 
         img_dim = [3, 32, 32]
         num_classes = 10
+        
+    elif args.dataset == 'CIFAR-10_rot':
+        train_transform=transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        test_transform=transforms.Compose([
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        train_set = datasets.CIFAR10('data', train=True, download=True, transform=train_transform)
+        if validation_split:
+            train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
+        test_set = datasets.CIFAR10('data', train=False, download=True, transform=test_transform)
+
+        img_dim = [3, 32, 32]
+        num_classes = 10
 
     elif args.dataset == 'CIFAR-100':
         train_transform=transforms.Compose([
@@ -248,6 +295,27 @@ def select_dataset(args, validation_split=False):
         ])
 
         test_transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        train_set = datasets.CIFAR100('data', train=True, download=True, transform=train_transform)
+        if validation_split:
+            train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
+        test_set = datasets.CIFAR100('data', train=False, download=True, transform=test_transform)
+
+        img_dim = [3, 32, 32]
+        num_classes = 100
+        
+    elif args.dataset == 'CIFAR-100_rot':
+        train_transform=transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        test_transform=transforms.Compose([
+            transforms.RandomRotation(360),
             transforms.ToTensor(),
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
@@ -295,6 +363,7 @@ def select_dataset(args, validation_split=False):
         pin_memory=True, 
         shuffle=True
     )
+    
     test_loader = DataLoader(test_set, 
         batch_size=args.batch_size_test, 
         num_workers=8, 

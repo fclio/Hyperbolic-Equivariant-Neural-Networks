@@ -70,9 +70,9 @@ def getArguments():
                         help = "Number of layers in ResNet.")
     parser.add_argument('--embedding_dim', default=512, type=int, 
                         help = "Dimensionality of classification embedding space (could be expanded by ResNet)")
-    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["euclidean", "lorentz"], 
+    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz"], 
                         help = "Select conv model encoder manifold.")
-    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["euclidean", "lorentz", "poincare"], 
+    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "poincare"], 
                         help = "Select conv model decoder manifold.")
     
     parser.add_argument('--model_type', default='resnet', type=str,
@@ -90,10 +90,12 @@ def getArguments():
                         help = "Clipping parameter for hybrid HNNs proposed by Guo et al. (2022)")
     
     # Dataset settings
-    parser.add_argument('--dataset', default='CIFAR-100', type=str, choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet","MNIST_rotation"], 
+    parser.add_argument('--dataset', default='CIFAR-100', type=str, choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot"], 
                         help = "Select a dataset.")
 
 
+    parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
+                help="Select conv model encoder manifold.")
     args, _ = parser.parse_known_args()
 
     return args
@@ -104,9 +106,16 @@ def save_results_as_json(results, output_path):
         json.dump(results, f, indent=4)
 
 def main(args):
-    device = args.device[0]
-    torch.cuda.set_device(device)
-    torch.cuda.empty_cache()
+    
+    if torch.cuda.is_available():
+        device = args.device[0] 
+        torch.cuda.set_device(device)
+        torch.cuda.empty_cache()
+        print(f"Using CUDA device: {device}")
+    else:
+        device = "cpu"
+        print("CUDA not available, using CPU.")
+
     results = {}
     print("Arguments:")
     print(args)
@@ -163,7 +172,7 @@ def main(args):
         print(f"Mode {args.mode} not implemented yet.")
 
     print("Finished!")
-    output_path = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_test_result.json")
+    output_path = os.path.join(args.output_dir, f"{args.exp_name}_test_{args.dataset}.json")
     save_results_as_json(results, output_path)
     
 

@@ -36,7 +36,7 @@ class LorentzConv1d(nn.Module):
         self.padding = padding
 
         lin_features = (self.in_channels - 1) * self.kernel_size + 1
-
+        
         self.linearized_kernel = LorentzFullyConnected(
             manifold,
             lin_features, 
@@ -62,6 +62,7 @@ class LorentzConv1d(nn.Module):
         patches_space = patches.narrow(2, 1, patches.shape[2]-1).reshape(bsz, patches.shape[1], -1)
         patches_pre_kernel = torch.concat((patches_time_rescaled, patches_space), dim=-1)
 
+        # it use the LorentzFullyConnected forward here
         out = self.linearized_kernel(patches_pre_kernel)
 
         return out
@@ -115,11 +116,21 @@ class LorentzConv2d(nn.Module):
             self.dilation = (dilation, dilation)
         else:
             self.dilation = dilation
-
+        #  Number of elements in the kernel (H * W).
         self.kernel_len = self.kernel_size[0] * self.kernel_size[1]
-
+        # calculates the total number of features after applying a 2D convolution operation
+        # since we normally added +1 before passed to the conv2d for time component, (in_channels - 1) = Excludes the time component (the first channel) 
+        # input channel * all elements in kernel = all kernel element in each channel.
+        # +1: The time component in Lorentz space.
         lin_features = ((self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]) + 1
+        # print("parameter: ", self.in_channels, self.kernel_size, self.out_channels)
+        # in_channels: 2
+        # kernel_size: (3, 3)
+        # out_channels: 65
+        # lin_features: 10
 
+
+        # Instead of using a standard linear layer, this uses LorentzFullyConnected to preserve hyperbolic properties.
         self.linearized_kernel = LorentzFullyConnected(
             manifold,
             lin_features, 
@@ -127,18 +138,33 @@ class LorentzConv2d(nn.Module):
             bias=bias,
             normalize=LFC_normalize
         )
+
+
+        # Extracts sliding windows (patches) from the input tensor, similar to what a convolution does.
         self.unfold = torch.nn.Unfold(kernel_size=(self.kernel_size[0], self.kernel_size[1]), dilation=dilation, padding=padding, stride=stride)
 
         self.reset_parameters()
 
+    # we are directly modifying the weights of the nn.Linear layer inside LorentzFullyConnected, which use later in forward
+    # need to modify the connected LFC initation part if need to add the equivariant part!!!
     def reset_parameters(self):
         stdv = math.sqrt(2.0 / ((self.in_channels-1) * self.kernel_size[0] * self.kernel_size[1]))
+        
         self.linearized_kernel.weight.weight.data.uniform_(-stdv, stdv)
+        # print("hyperbolic weight:", a)
+        # out_channel, lin_channel
+        # torch.Size([65, 10])
         if self.bias:
             self.linearized_kernel.weight.bias.data.uniform_(-stdv, stdv)
 
     def forward(self, x):
         """ x has to be in channel-last representation -> Shape = bs x H x W x C """
+        ## step 1: Computes the output height and width after convolution without account for any lorenz point
+        # x = (batch_size, height, width, channels)
+        # torch.Size([128, 32, 32, 2])
+        # print("x", x.shape)
+       
+        # !!! remember here for the channels, it is normal_channels + 1 (time)
         bsz = x.shape[0]
         h, w = x.shape[1:3]
 
@@ -146,24 +172,77 @@ class LorentzConv2d(nn.Module):
             (h + 2 * self.padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1)
         w_out = math.floor(
             (w + 2 * self.padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1)
+        # 16
 
+        ## step 2: Extracting Patches
+        # extracting local patches from the input tensor and reshaping them to prepare for further processing, like applying a linear layer or convolutional kernel.
         x = x.permute(0, 3, 1, 2)
+        # x = (batch_size, channels, height, width)
+        # torch.Size([128, 2, 32, 32])
 
-        patches = self.unfold(x)  # batch_size, channels * elements/window, windows
+        # used to extract sliding local blocks (or patches) from the input tensor
+        patches = self.unfold(x)  
+   
+        # patches = (batch_size, channels(+1 time) * kernel_height * kernel_width, num_patches)
+        # The number of elements per patch /each channels with each kernerl element: 2 * 3* 3
+        # num of patches that can be extracted from each image = ((height + 2 * padding - dilation * (kernel_size - 1) - 1) / stride) + 1
+        # patches = torch.Size([128, 18, 256])
+        # therefore, These patches contain both spatial and time information.
+
         patches = patches.permute(0, 2, 1)
+        # patches = (batch_size,  windows, channels * elements/window)
+        # patches = torch.Size([128, 256, 18])
+        
 
-        # Now we have flattened patches with multiple time elements -> fix the concatenation to perform Lorentz direct concatenation by Qu et al. (2022)
-        patches_time = torch.clamp(patches.narrow(-1, 0, self.kernel_len), min=self.manifold.k.sqrt())  # Fix zero (origin) padding
+
+        ## step 3： extract the time component from patches and treat them separately
+        # Apply Lorentz Concatenation (Qu et al., 2022)
+        # Now we have flattened patches with multiple time elements 
+        # -> fix the concatenation to perform Lorentz direct concatenation by Qu et al. (2022)
+        # Extracts the time coordinate and ensures it does not go below the hyperbolic manifold’s threshold.
+        patches_time = torch.clamp(patches.narrow(-1, 0, self.kernel_len), min=self.manifold.k.sqrt())  
+        # 1. narrow: would extract the first kernel_len from each window (slice the last dimension from index 0 to 9).
+        # 1. [128, 256, 9].
+        # 2. clamp: ensures that any value in the tensor smaller than self.manifold.k.sqrt() (e.g., 0.1) will be replaced by 0.1. # Fix zero (origin) padding
+        # patches_time = (batch_size,  num of patches, kernel size (since it is last element and it is belong to time))
+
+        # step 2: Computes the rescaled time component using the Lorentz metric.
         patches_time_rescaled = torch.sqrt(torch.sum(patches_time ** 2, dim=-1, keepdim=True) - ((self.kernel_len - 1) * self.manifold.k))
+        #  summing the squared values of the time component for each patch.
+        #  Adjusts for the curvature of the hyperbolic manifold by subtracting ((self.kernel_len - 1) * self.manifold.k).
+        # Takes the square root of the result to normalize the time components and ensure they remain in accordance with the Lorentz model.patches_time = (batch_size,  windows, 1)
+        #  torch.Size([128, 256, 1])
 
+
+
+        ## step 4: Extracts the remaining spatial components from patches.
         patches_space = patches.narrow(-1, self.kernel_len, patches.shape[-1] - self.kernel_len)
-        patches_space = patches_space.reshape(patches_space.shape[0], patches_space.shape[1], self.in_channels - 1, -1).transpose(-1, -2).reshape(patches_space.shape) # No need, but seems to improve runtime??
+        # torch.Size([128, 256, 9])
+        # No, the reshaping itself does not change the data
+        patches_space = patches_space.reshape(patches_space.shape[0], patches_space.shape[1], self.in_channels - 1, -1).transpose(-1, -2).reshape(patches_space.shape) 
+        # No need, but seems to improve runtime??
+        # torch.Size([128, 256, 9])
 
+
+
+        ## step 5: Concatenates the rescaled time component and spatial components to maintain hyperbolic consistency
         patches_pre_kernel = torch.concat((patches_time_rescaled, patches_space), dim=-1)
+        # patches = (batch_size, 1(time) + [channels(-1) * kernel_height * kernel_width], num_patches)
+        # pathes: torch.Size([128, 256, 10])
 
+        # step 6: Apply Lorentz Fully Connected Layer
         out = self.linearized_kernel(patches_pre_kernel)
-        out = out.view(bsz, h_out, w_out, self.out_channels)
 
+        # torch.Size([128, 256, 65])
+     
+        out = out.view(bsz, h_out, w_out, self.out_channels)
+        # Passes patches through the LorentzFullyConnected layer.
+        # Reshapes the output to match the expected 2D convolution output.
+        # here the self.out_channels is also added 1 for time (maybe for later case)
+        # torch.Size([128, 16, 16, 65])
+
+        # here why using this shape? why having out_channel at the end? for hyperbolic?
+        
         return out
 
 class LorentzConvTranspose2d(nn.Module):

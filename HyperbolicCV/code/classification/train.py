@@ -77,9 +77,9 @@ def getArguments():
                         help="Number of layers in ResNet.")
     parser.add_argument('--embedding_dim', default=512, type=int,
                         help="Dimensionality of classification embedding space (could be expanded by ResNet)")
-    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["euclidean", "lorentz", "equivariant"],
+    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["euclidean", "lorentz", "equivariant", "lorentz_equivariant" ],
                         help="Select conv model encoder manifold.")
-    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["euclidean", "lorentz", "equivariant","poincare"],
+    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["euclidean", "lorentz", "equivariant","lorentz_equivariant","poincare"],
                         help="Select conv model decoder manifold.")
 
     # Hyperbolic geometry settings
@@ -101,7 +101,7 @@ def getArguments():
     
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
-                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation"],
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot"],
                         help="Select a dataset.")
     
 
@@ -119,9 +119,16 @@ def save_test_results(results, output_dir):
     print(f"Test results saved to {results_file}")
 
 def main(args):
-    device = args.device[0]
-    torch.cuda.set_device(device)
-    torch.cuda.empty_cache()
+
+    # Automatically detect device
+    if torch.cuda.is_available():
+        device = args.device[0] 
+        torch.cuda.set_device(device)
+        torch.cuda.empty_cache()
+        print(f"Using CUDA device: {device}")
+    else:
+        device = "cpu"
+        print("CUDA not available, using CPU.")
 
     print("Running experiment: " + args.exp_name)
 

@@ -13,11 +13,36 @@ make_indices_functions = {(1, 4): make_c4_z2_indices,
 
 
 def trans_filter(w, inds):
+    
+    #  self.weight: torch.Size([64, 1, 1, 3, 3])
+    #  (out_channels, in_channels, input_stabilizer_size, kernel_size, kernel_size)
+    #  self.inds: (8, 1, 3, 3, 3)
+    #  (num_group_transformation, input_stabilizer_size, kernel_size, kernel_size, 3)
+       
     inds_reshape = inds.reshape((-1, inds.shape[-1])).astype(np.int64)
+    # indeces: (8 * 1 * 3 * 3, 3) = (72, 3)
+    # Each row contains a (T, U, V) triplet that maps a pixel from the original kernel to a transformed version.
+
+    #  step 2: this remaps the filter weights based on the transformation indices.
+    # !!! here is a special index finding will become w(:,:, len(n-dimension_list matching follow select base on index))
     w_indexed = w[:, :, inds_reshape[:, 0].tolist(), inds_reshape[:, 1].tolist(), inds_reshape[:, 2].tolist()]
+    # Extracts transformed filter pixels using (T, U, V) from w
+    # w_indexed.shape = (64, 1, 72) (since 72 = 8 * 1 * 3 * 3)
+    # (out_channels, in_channels, num_group_transformation * input_stabilizer_size * kernel_size * kernel_size)
+
     w_indexed = w_indexed.view(w_indexed.size()[0], w_indexed.size()[1],
                                     inds.shape[0], inds.shape[1], inds.shape[2], inds.shape[3])
+    # torch.Size([64, 1, 8, 1, 3, 3])
+    # (out_channels, in_channels, num_group_transformation, input_stabilizer_size, kernel_size, kernel_size)
+
+
     w_transformed = w_indexed.permute(0, 2, 1, 3, 4, 5)
+    #  torch.Size([64, 8, 1, 1, 3, 3])
+    # (out_channels, num_group_transformation, in_channels, input_stabilizer_size, kernel_size, kernel_size)
+    
+
+    # Ensures that the tensor is stored contiguously in memory
+    # This improves efficiency for PyTorch computations
     return w_transformed.contiguous()
 
 
@@ -41,6 +66,7 @@ class SplitGConv2D(nn.Module):
         self.input_stabilizer_size = input_stabilizer_size
         self.output_stabilizer_size = output_stabilizer_size
 
+        # here all filter is learnable
         self.weight = Parameter(torch.Tensor(
             out_channels, in_channels, self.input_stabilizer_size, *kernel_size))
         if bias:
@@ -49,7 +75,29 @@ class SplitGConv2D(nn.Module):
             self.register_parameter('bias', None)
         self.reset_parameters()
 
+        # contains a list of index mappings for transformations like rotation and reflection. 
+        # Instead of manually shifting pixels, we use indices to reorder the filter weights efficiently.
+        # !!! for each of the 8 transformations, it gives a mapping (T, U, V) for every pixel in the 3x3 kernel.
         self.inds = self.make_transformation_indices()
+        # (8, 1, 3, 3, 3)
+        # (Number of output transformations (D4 group: 4 rotations + 4 reflections)
+        # Number of input transformations (Z2 space: only 1 channel, no structured symmetries)
+        # Kernel size(3x3), 
+        # 3D indices (T, U, V) for transformation mappin
+        ## Transformation Index: 
+        # For P4 (Rotational Group):
+        # T = 0 → 0° Rotation (identity)
+        # T = 1 → 90° Rotation
+        # T = 2 → 180° Rotation
+        # T = 3 → 270° Rotation
+        # For P4M (Rotations + Reflections):
+        # T = 4 → Horizontal Reflection
+        # T = 5 → Vertical Reflection
+        # T = 6 → Diagonal Reflection (↘)
+        # T = 7 → Diagonal Reflection (↙)
+        # U (Row Index in Kernel Space)
+        # V (Column Index in Kernel Space)
+
 
     def reset_parameters(self):
         n = self.in_channels
@@ -61,23 +109,50 @@ class SplitGConv2D(nn.Module):
             self.bias.data.uniform_(-stdv, stdv)
 
     def make_transformation_indices(self):
+        # to understand later!
         return make_indices_functions[(self.input_stabilizer_size, self.output_stabilizer_size)](self.ksize)
 
     def forward(self, input):
+        # step 1: Transforms filters using the precomputed transformation indices.
+        # change the self.weight 
+ 
+        #  self.weight: torch.Size([64, 1, 1, 3, 3])
+        #  (out_channels, in_channels, input_stabilizer_size, kernel_size, kernel_size)
+        #  self.inds: (8, 1, 3, 3, 3)
+        #  (num_group_transformation, input_stabilizer_size, kernel_size, kernel_size, 3)
         tw = trans_filter(self.weight, self.inds)
+        # torch.Size([64, 8, 1, 1, 3, 3])
+        # (out_channels, num_group_transformation, in_channels, input_stabilizer_size, kernel_size, kernel_size)
+
+        
+        # Reshapes transformed weights for use in conv2d.
         tw_shape = (self.out_channels * self.output_stabilizer_size,
                     self.in_channels * self.input_stabilizer_size,
                     self.ksize, self.ksize)
         tw = tw.view(tw_shape)
 
+        # Reshapes input to match transformed kernel dimensions.
         input_shape = input.size()
-        input = input.view(input_shape[0], self.in_channels*self.input_stabilizer_size, input_shape[-2], input_shape[-1])
 
+        # before group equivairn input: [batch size, in_channels, kernel size, kernel size]
+        # after group equivairn input: [batch size, in_channels, input_stabilizer_size, kernel size, kernel size]
+        # !!!! this is important since before 3* 1= 3 it just keep the same shape
+        # it is mainly use later to concatneate all num_transformation into one list, as including each transformation as additional input channel so instead of rgb, but rgb for each transformation
+        input = input.view(input_shape[0], self.in_channels*self.input_stabilizer_size, input_shape[-2], input_shape[-1])
+        # after group equivairn input: [batch size, in_channels * input_stabilizer_size, kernel size, kernel size]
+
+        print("learnable weight", tw.requires_grad)  # Should be True
+        
+        # Performs convolution using the transformed weights and reshaped input
         y = F.conv2d(input, weight=tw, bias=None, stride=self.stride,
                         padding=self.padding)
+        
+        # if doing lorenz + equivariant, then i must directly do nn.linear, 
+        
         batch_size, _, ny_out, nx_out = y.size()
+        print("y_size", y.size())
         y = y.view(batch_size, self.out_channels, self.output_stabilizer_size, ny_out, nx_out)
-
+        # here why using this shape? why having out_channel, then output_size? for equivairant?
         if self.bias is not None:
             bias = self.bias.view(1, self.out_channels, 1, 1, 1)
             y = y + bias
