@@ -37,6 +37,8 @@ class LorentzFullyConnected(nn.Module):
         self.normalize = normalize
 
         # might need to change!!!
+
+        
         self.weight = nn.Linear(self.in_features, self.out_features, bias=bias)
         # This layer will perform a standard matrix multiplication during the forward pass
 
@@ -51,15 +53,20 @@ class LorentzFullyConnected(nn.Module):
 
     def forward(self, x):
         # Linear Transformation 
-        # [batch_size, num_patches, channels]
+        # x = [batch_size, num_patches, channels]
+        # nn.linear.weight = []
         # the important things is here where they linear the time component together
      
-        # torch.Size([128, 256, 10])
+        # input: torch.Size([128, 256, 10]), [batch_size, num_patches, in_channels]
+        # weight: [65, 10], output_channel, in_channel
+        # weight control the output_channel, and ensure the in_channels is same as the input
+        # output: torch.Size([128, 256, 65]), [batch_size, num_patches, out_features]
         x = self.weight(x)
+  
         # torch.Size([128, 256, 65])
         # [batch_size, num_patches, out_features]
         # !!!! be careful, out_channel here is automatically +1 for time in beginning
-   
+
         # Extract the Spatial Components
         x_space = x.narrow(-1, 1, x.shape[-1] - 1)
         # [batch_size, num_patches, out_features - 1] after this operation.
@@ -102,7 +109,7 @@ class LorentzFullyConnected(nn.Module):
             # they recalculated the time base on x_space then added there.
 
         # out 3 torch.Size([128, 256, 65])
-        
+ 
         return x
 
     def reset_parameters(self):

@@ -15,8 +15,9 @@ from groupy.gconv.pytorch_gconv.pooling import global_max_pooling
 from groupy.gconv.pytorch_gconv import P4ConvZ2, P4ConvP4, P4MConvZ2, P4MConvP4M
 
 from lib.lorentz_equivariant.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+from lib.lorentz_equivariant.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
 from lib.lorentz_equivariant.layers.LBnorm import GroupLorentzBatchNorm2d
-from lib.lorentz_equivariant.layers.LModules import GroupLorentzGlobalAvgPool2d
+from lib.lorentz_equivariant.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
 
 
 equivariant_num = {
@@ -51,13 +52,18 @@ class CNN(nn.Module):
         self.pooling = self._get_GlobalAveragePooling()
 
         # Fully Connected Layer
+        final_in_channels = 512
         if self.manifold is not None:
-            self.fc1 = LorentzFullyConnected(self.manifold, in_features=512+1, out_features=self.embed_dim)
+            if self.eq_type is not None:
+                self.fc1 = GroupLorentzLinear(self.manifold, in_channels=final_in_channels+1, out_features=self.embed_dim, input_stabilizer_size=equivariant_num[self.eq_type])
+            else:
+                self.fc1 = LorentzFullyConnected(self.manifold, in_features=final_in_channels+1, out_features=self.embed_dim)
         elif self.eq_type is not None:
-            self.fc1 = nn.Linear(512 * equivariant_num[self.eq_type], self.embed_dim)
+            self.fc1 = nn.Linear(final_in_channels * equivariant_num[self.eq_type], self.embed_dim)
         else:
-            self.fc1 = nn.Linear(512, self.embed_dim)
+            self.fc1 = nn.Linear(final_in_channels, self.embed_dim)
         self.activation = self.get_Activation()
+        self.activation_final = self.get_Activation(final=True)
 
         # map the dimension to the num of class as final output logit [batch, num_class], 
         # but if we have decoder, we don't need to do this here, it will do it later in decoder side
@@ -75,50 +81,87 @@ class CNN(nn.Module):
             x = x.permute(0, 2, 3, 1)  # Convert to (batch, H, W, C) for Lorentz ops
             x = self.manifold.projx(F.pad(x, pad=(1, 0)))  # Lorentz projection. Adds an extra dimension of time at the start
         # Shape: [batch, 32, 32, 4]
-   
-        x = self.activation(self.bn1(self.conv1(x)))    # Strided Conv downsamples
+
+        # x = self.conv1(x)
+        # # print("after 1",x)
+        # x = self.bn1(x)
+        # # print("after 2",x)
+        # x = self.activation(x)
+        # print("after 3", x)
+
+        # testing = self.bn4(x)
+        
+        x = self.activation(self.bn1(self.conv1(x)))   # Strided Conv downsamples
+        # print("after",x)
         # Shape: [batch, 16, 16, 65]
         # equivariant: [batch, 64, 8, 16, 16]
+        # lorenz+equivairant: [batch, 16, 16, 64 * 8 +1] = [batch, 16, 16, 513]
         # print("shape 1:", x.shape)
         # print("layer 1", x.shape)
         # layer 1 torch.Size([128, 8, 16, 16, 65])
-
+        # print("layer 1", x)
         
-        # dede
-        x = self.activation(self.bn2(self.conv2(x)))  
+        
+        x = self.activation(self.bn2(self.conv2(x)))
+        # x = self.conv2(x)
+        # print("layer 2, conv3", x)
+        # x = self.bn2(x)
+        # print("layer 2, bn3", x)
+        # x = self.activation(x)
+        # print("layer 2, act", x)
         # Shape: [batch, 8, 8, 129]
         # equivariant: [batch, 128, 8, 8, 8]
-        # print("shape 2:", x.shape)
+        # lorenz+equivairant: [batch, 8, 8, 128 * 8 +1] = [batch, 8, 8, 1025]
+        # print("layer 2", x)
+        # there is one nan somewhere
 
-        x = self.activation(self.bn3(self.conv3(x)))  
+        # x = self.conv3(x)
+        # print("layer 3, conv3", x)
+        # x = self.bn3(x)
+        # # print("layer 3, bn3", x)
+        # x = self.activation(x)
+        # # print("layer 3, act", x)
+
+        x = self.activation(self.bn3(self.conv3(x)))
         # Shape: [batch, 4, 4, 257]
         # equivariant: [batch, 256, 8, 4, 4]
+        # lorenz+equivairant: [batch, 4, 4, 256 * 8 +1] = [batch, 16, 16, 2048]
         # print("shape 3:", x.shape)
-        sdedede
-        x = self.activation(self.bn4(self.conv4(x)))  
+        # print("layer 3", x)   
+
+
+        x = self.activation(self.bn4(self.conv4(x)))
         # Shape: [batch, 2, 2, 513]
         # equivariant: [batch, 512, 8, 2, 2]
+        # lorenz+equivairant: [batch, 2, 2, 513 * 8 +1] = [batch, 16, 16, 4105]
         # print("shape 4:", x.shape)
- 
+        # print("layer 4", x) 
+        
         x = self.pooling(x)  # Global Pooling in Lorentz space
         # Shape: [batch, 1, 1, 513]
         # equivariant: [batch, 512, 8, 1, 1]
+        # lorenz+equivairant: [batch, 2, 2, 513 * 8 +1] = [batch, 1, 1, 4105]
         # print("shape 5:", x.shape)
-
+        # print("layer 5", x) 
 
         x = x.view(x.size(0), -1)  # Flatten for the fully connected (FC) layer.
         # Shape: [batch, 513]
         # eqivariant: [batch, 512 * 8=4096]
-        # print("shape fc:", x.shape)
+        # lorenz+equivairant: [batch, 512 * 8 + 1=4097]
+        # print("layer 6", x) 
 
         x = self.fc1(x) # here it reduce a dimension
+        # Shape: [batch, 512]
         # print("shape 6:", x.shape)
         # eqivariant: [batch, 512]
+        # lorenz+equivairant: [batch, 512]
+        # print("layer 7", x) 
 
-        x = self.activation(x)
+        x = self.activation_final(x)
         # Shape: [batch, 512]
         # eqivariant: [batch, 512]
         # print("shape 7:", x.shape)
+        # print("layer 8", x) 
 
         # x = F.dropout(x, training=self.training, p=0.1) #Uses dropout (10%) for regularization.
         #  It works by randomly setting some neuron activations to zero during training
@@ -127,11 +170,11 @@ class CNN(nn.Module):
         if self.manifold is not None:
             x = self.manifold.add_time(x)  # Ensure compatibility with LorentzMLR
         # Shape: [batch, 513]
-
+        # print("layer 9", x)
         if self.predictor is not None:
             x = self.predictor(x)
             # Shape: [batch, 100]
- 
+        # print("final", x)
         return x
     
     def _get_GlobalAveragePooling(self):
@@ -150,7 +193,7 @@ class CNN(nn.Module):
 
         else:
             raise RuntimeError(f"Manifold {type(self.manifold)} not supported in ResNet.")
-
+ 
     def _get_predictor(self, in_features, num_classes):
         if self.manifold is None:
             return nn.Linear(in_features, num_classes, bias=self.bias)
@@ -235,16 +278,18 @@ class CNN(nn.Module):
         elif type(self.manifold) is CustomLorentz:
                 
             if self.eq_type is not None:
-                if self.eq_type =="P4M":
-                    return GroupLorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1)
+                return GroupLorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1,input_stabilizer_size= equivariant_num[self.eq_type])
             else:
                 return LorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1)
 
-    def get_Activation(self):
+    def get_Activation(self, final=False):
         if self.manifold is None:
             return F.relu
         elif type(self.manifold) is CustomLorentz:
-            return LorentzReLU(self.manifold)
+            if final == False and self.eq_type is not None:
+                return GroupLorentzReLU(manifold=self.manifold,input_stabilizer_size= equivariant_num[self.eq_type])
+            else:
+                return LorentzReLU(self.manifold)
 
 
 def EUCLIDEAN_CNN(img_dim=[3, 32, 32], embed_dim=512,

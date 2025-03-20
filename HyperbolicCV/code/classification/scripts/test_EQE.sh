@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gpus-per-node=2
 #SBATCH --time=20:00:00
-#SBATCH --output=slurm_output/train_ECNN_cifar10_%A.out
+#SBATCH --output=slurm_output/train_EQECNN_mnist_%A.out
 
 module purge
 module load 2024
@@ -19,5 +19,5 @@ module load 2024
 
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-python classification/train.py -c classification/config/EQE-CNN.txt \
-   --output_dir classification/output --device cuda:0 --dataset MNIST --num_epochs 200
+python classification/train_test.py -c classification/config/EQE-CNN.txt \
+   --output_dir classification/output --device cuda:0 --dataset MNIST --num_epochs 200 --batch_size 1

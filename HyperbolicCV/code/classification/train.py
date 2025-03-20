@@ -15,7 +15,7 @@ from torch.nn import DataParallel
 
 import configargparse
 from tqdm import tqdm
-
+import matplotlib.pyplot as plt
 import random
 import numpy as np
 
@@ -111,6 +111,28 @@ def getArguments():
     return args
 
 
+
+
+
+def plot_loss_curve(train_losses, val_losses, output_dir):
+    """Plots and saves the training and validation loss curve."""
+    plt.figure(figsize=(8, 6))
+    plt.plot(range(1, len(train_losses) + 1), train_losses, marker='o', linestyle='-', color='b', label="Training Loss")
+    plt.plot(range(1, len(val_losses) + 1), val_losses, marker='s', linestyle='-', color='r', label="Validation Loss")
+    
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Training & Validation Loss Curve")
+    plt.legend()
+    plt.grid(True)
+
+    # Save the figure
+    loss_plot_path = os.path.join(output_dir, "loss_curve.png")
+    plt.savefig(loss_plot_path)
+    print(f"Loss curve saved to {loss_plot_path}")
+    plt.show()
+
+
 def save_test_results(results, output_dir):
     """ Saves the test results to a JSON file. """
     results_file = os.path.join(output_dir, f"test_results.json")
@@ -172,7 +194,10 @@ def main(args):
 
     best_acc = 0.0
     best_epoch = 0
-
+    
+    train_losses = []  # Store training loss per epoch 
+    val_losses = []    # Store validation loss per epoch 
+    
     for epoch in range(start_epoch, args.num_epochs):
         model.train()
 
@@ -184,14 +209,15 @@ def main(args):
             # ------- Start iteration -------
             x = x.to(device)
             y = y.to(device)
-
+        
             logits = model(x)
+       
             loss = criterion(logits, y)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+   
             with torch.no_grad():
                 top1, top5 = accuracy(logits, y, topk=(1, 5))
                 losses.update(loss.item())
@@ -199,8 +225,9 @@ def main(args):
                 acc5.update(top5.item())
 
             global_step += 1
+       
             # ------- End iteration -------
-
+     
         # ------- Start validation and logging -------
         with torch.no_grad():
             if lr_scheduler is not None:
@@ -215,7 +242,10 @@ def main(args):
             print(
                 "Epoch {}/{}: Loss={:.4f}, Acc@1={:.4f}, Acc@5={:.4f}, Validation: Loss={:.4f}, Acc@1={:.4f}, Acc@5={:.4f}".format(
                     epoch + 1, args.num_epochs, losses.avg, acc1.avg, acc5.avg, loss_val, acc1_val, acc5_val))
-
+            
+            train_losses.append(losses.avg)  # Store average loss for this epoch 
+            val_losses.append(loss_val)  # Store average loss for this epoch 
+            
             # Testing for best model
             if acc1_val > best_acc:
                 best_acc = acc1_val
@@ -233,7 +263,8 @@ def main(args):
 
     print("-----------------\nTraining finished\n-----------------")
     print("Best epoch = {}, with Acc@1={:.4f}".format(best_epoch, best_acc))
-
+    plot_loss_curve(train_losses, val_losses, output_dir) 
+    
     if args.output_dir is not None:
         save_path = output_dir + "/final_model.pth" 
   

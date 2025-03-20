@@ -160,7 +160,7 @@ class LorentzConv2d(nn.Module):
     def forward(self, x):
         """ x has to be in channel-last representation -> Shape = bs x H x W x C """
         ## step 1: Computes the output height and width after convolution without account for any lorenz point
-        # x = (batch_size, height, width, channels)
+        # x = (batch_size, image height, image width, space channels + time channels)
         # torch.Size([128, 32, 32, 2])
         # print("x", x.shape)
        
@@ -227,7 +227,7 @@ class LorentzConv2d(nn.Module):
 
         ## step 5: Concatenates the rescaled time component and spatial components to maintain hyperbolic consistency
         patches_pre_kernel = torch.concat((patches_time_rescaled, patches_space), dim=-1)
-        # patches = (batch_size, 1(time) + [channels(-1) * kernel_height * kernel_width], num_patches)
+        # patches = (batch_size, num_patches, 1(time) + [channels(-1) * kernel_height * kernel_width])
         # pathes: torch.Size([128, 256, 10])
 
         # step 6: Apply Lorentz Fully Connected Layer

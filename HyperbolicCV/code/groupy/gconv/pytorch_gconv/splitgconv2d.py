@@ -68,11 +68,13 @@ class SplitGConv2D(nn.Module):
 
         # here all filter is learnable
         self.weight = Parameter(torch.Tensor(
-            out_channels, in_channels, self.input_stabilizer_size, *kernel_size))
+            self.out_channels, in_channels, self.input_stabilizer_size, *kernel_size))
+
         if bias:
-            self.bias = Parameter(torch.Tensor(out_channels))
+            self.bias = Parameter(torch.Tensor(self.out_channels))
         else:
             self.register_parameter('bias', None)
+            
         self.reset_parameters()
 
         # contains a list of index mappings for transformations like rotation and reflection. 
@@ -115,7 +117,9 @@ class SplitGConv2D(nn.Module):
     def forward(self, input):
         # step 1: Transforms filters using the precomputed transformation indices.
         # change the self.weight 
- 
+        # print("before", self.weight)
+        # print(self.weight)
+
         #  self.weight: torch.Size([64, 1, 1, 3, 3])
         #  (out_channels, in_channels, input_stabilizer_size, kernel_size, kernel_size)
         #  self.inds: (8, 1, 3, 3, 3)
@@ -123,14 +127,16 @@ class SplitGConv2D(nn.Module):
         tw = trans_filter(self.weight, self.inds)
         # torch.Size([64, 8, 1, 1, 3, 3])
         # (out_channels, num_group_transformation, in_channels, input_stabilizer_size, kernel_size, kernel_size)
-
         
+                
         # Reshapes transformed weights for use in conv2d.
         tw_shape = (self.out_channels * self.output_stabilizer_size,
                     self.in_channels * self.input_stabilizer_size,
                     self.ksize, self.ksize)
         tw = tw.view(tw_shape)
-
+        # print("tw information")
+        # print(isinstance(tw, nn.Parameter))  # This will print False
+        # print(tw.requires_grad)
         # Reshapes input to match transformed kernel dimensions.
         input_shape = input.size()
 
@@ -138,20 +144,45 @@ class SplitGConv2D(nn.Module):
         # after group equivairn input: [batch size, in_channels, input_stabilizer_size, kernel size, kernel size]
         # !!!! this is important since before 3* 1= 3 it just keep the same shape
         # it is mainly use later to concatneate all num_transformation into one list, as including each transformation as additional input channel so instead of rgb, but rgb for each transformation
+        
         input = input.view(input_shape[0], self.in_channels*self.input_stabilizer_size, input_shape[-2], input_shape[-1])
         # after group equivairn input: [batch size, in_channels * input_stabilizer_size, kernel size, kernel size]
+ 
+        # print("learnable weight", tw.requires_grad)  # Should be True
 
-        print("learnable weight", tw.requires_grad)  # Should be True
-        
+        # weight: ([513, 1, 3, 3]) (out_channel, in_channel, ksize, ksize)
+        # weight determine the out_channel for output
+        # input: ([128, 1, 32, 32]) (batch_size，in_channel, img_size, img_size)
+        # input determine the batch
         # Performs convolution using the transformed weights and reshaped input
         y = F.conv2d(input, weight=tw, bias=None, stride=self.stride,
                         padding=self.padding)
         
         # if doing lorenz + equivariant, then i must directly do nn.linear, 
-        
+       
+        # with dilation:
+        #  h_out = math.floor(
+        #     (h + 2 * self.padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1)
+        # w_out = math.floor(
+        #     (w + 2 * self.padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1)
+
+        # without:
+        #  h_out = math.floor(
+        #     (h + 2 * self.padding[0] -  self.kernel_size[0]) / self.stride[0] + 1)
+        # w_out = math.floor(
+        #     (w + 2 * self.padding[1] - self.kernel_size[1]) / self.stride[1] + 1)
+
         batch_size, _, ny_out, nx_out = y.size()
-        print("y_size", y.size())
+        # print("y_size", y.size())
+        # output: ([128, 512, 16, 16]) (batch, out_channel, ny, nx)
+       
         y = y.view(batch_size, self.out_channels, self.output_stabilizer_size, ny_out, nx_out)
+      
+        # ([128, 64, 8, 16, 16]) (batch_size, out_channels * output_stab, )
+        # print(y.view(batch_size,  self.out_channels *self.output_stabilizer_size* ny_out* nx_out))
+        # print(self.out_channels *self.output_stabilizer_size* ny_out* nx_out)
+
+        
         # here why using this shape? why having out_channel, then output_size? for equivairant?
         if self.bias is not None:
             bias = self.bias.view(1, self.out_channels, 1, 1, 1)

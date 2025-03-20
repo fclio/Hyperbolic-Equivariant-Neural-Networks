@@ -16,7 +16,10 @@ class CustomLorentz(Lorentz):
         """ Concatenates time component to given space component. """
         time = self.calc_time(space)
         return torch.cat([time, space], dim=-1)
-
+    def get_time(self, space):
+        """ Concatenates time component to given space component. """
+        time = self.calc_time(space)
+        return time
     def calc_time(self, space):
         """ Calculates time component from given space component. """
         return torch.sqrt(torch.norm(space, dim=-1, keepdim=True)**2+self.k)
@@ -91,3 +94,5 @@ class CustomLorentz(Lorentz):
     def tangent_relu(self, x: torch.Tensor) -> torch.Tensor:
         """ Implements ReLU activation in tangent space. """
         return self.expmap0(torch.relu(self.logmap0(x)))
+    
+    

@@ -38,13 +38,35 @@ def inner(u, v, *, keepdim=False, dim=-1):
 # @torch.jit.script
 def _inner(u, v, keepdim: bool = False, dim: int = -1):
     d = u.size(dim) - 1
+    # u is mean shape torch.Size([513])
+    # v is x shape torch.Size([128, 256, 513])
+    # uv torch.Size([128, 256, 513])
+
     uv = u * v
+
     if keepdim is False:
-        return -uv.narrow(dim, 0, 1).sum(dim=dim, keepdim=False) + uv.narrow(
+        a = -uv.narrow(dim, 0, 1).sum(dim=dim, keepdim=False) 
+        b = uv.narrow(
             dim, 1, d
         ).sum(dim=dim, keepdim=False)
+        return a + b
     else:
-        return torch.cat((-uv.narrow(dim, 0, 1), uv.narrow(dim, 1, d)), dim=dim).sum(
+        # print("keep dimension")
+        # this should be negative but it is positive
+        a = -uv.narrow(dim, 0, 1)
+        b = uv.narrow(dim, 1, d)
+        # print("First term (should be negative):", a)
+        # print(a.size())
+        # print("Remaining terms (should be positive):", b)
+        # print(b.size())
+        # a = ([128, 256, 1])
+        # b = ([128, 256, 512])
+        
+        # the result should be ... here 
+        combined = torch.cat((a, b), dim=dim)
+        # print("Combined tensor before sum:", combined)
+
+        return combined.sum(
             dim=dim, keepdim=True
         )
 
@@ -75,6 +97,7 @@ def inner0(v, *, k, keepdim=False, dim=-1):
 # @torch.jit.script
 def _inner0(v, k: torch.Tensor, keepdim: bool = False, dim: int = -1):
     res = -v.narrow(dim, 0, 1) * torch.sqrt(k)
+    
     if keepdim is False:
         res = res.squeeze(dim)
     return res
@@ -112,6 +135,16 @@ def dist(x, y, *, k, keepdim=False, dim=-1):
 # @torch.jit.script
 def _dist(x, y, k: torch.Tensor, keepdim: bool = False, dim: int = -1):
     d = -_inner(x, y, dim=dim, keepdim=keepdim)
+    # print("d", torch.isnan(d).any())
+    # print("d/k", torch.isnan(d/k).any())
+    # print("d",d)
+    # print("d/k", d/k)
+    # print("k",k)
+    # print("arcosh ", torch.isnan(arcosh(d / k)).any())
+    # this causes the nan!!!
+    # print("d",d)
+    # print("d/k", d/k)
+    # print("other",arcosh(d / k))
     return torch.sqrt(k) * arcosh(d / k)
 
 
@@ -143,6 +176,7 @@ def dist0(x, *, k, keepdim=False, dim=-1):
 # @torch.jit.script
 def _dist0(x, k: torch.Tensor, keepdim: bool = False, dim: int = -1):
     d = -_inner0(x, k=k, dim=dim, keepdim=keepdim)
+
     return torch.sqrt(k) * arcosh(d / k)
 
 
@@ -399,9 +433,23 @@ def logmap(x, y, *, k, dim=-1):
 
 # @torch.jit.script
 def _logmap(x, y, k, dim: int = -1):
+    # x is mean
+    # y is x
+    # print("x",x)
+    # print("y",y)
+    # print("k",k)
     dist_ = _dist(x, y, k=k, dim=dim, keepdim=True)
+    # print(dist)
+    # print("dist", torch.isnan(dist_).any())
+    # this is the error for put in all channels!!!
+
+    # print("dist", dist_)
     nomin = y + 1.0 / k * _inner(x, y, keepdim=True) * x
+    # print("nomin", torch.isnan(nomin).any())
+    
     denom = _norm(nomin, keepdim=True)
+    # print("denom", torch.isnan(denom).any())
+    
     return dist_ * nomin / denom
 
 
