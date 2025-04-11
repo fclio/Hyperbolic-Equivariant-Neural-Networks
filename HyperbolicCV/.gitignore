@@ -15,11 +15,13 @@
 *.gz
 *.html
 
+
+
 *code/classification/output
+*code/classification/output_hyperparameter
 *code/classification/data
 *code/data/
 *code/slurm_output/
 *code/test_result
 *slurm_output/
-
 
