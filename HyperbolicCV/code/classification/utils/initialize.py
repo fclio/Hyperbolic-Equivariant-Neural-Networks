@@ -96,6 +96,7 @@ def select_model(img_dim, num_classes, args):
             enc_args['learn_k'] = args.learn_k
             enc_args['k'] = args.encoder_k
             enc_args["eq_type"] = args.equivariant_type
+            enc_args["exp_v"] = args.exp_v
 
         dec_args = {
             'embed_dim' : args.embedding_dim,

@@ -20,4 +20,4 @@ module load 2024
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 python classification/train.py -c classification/config/EQE-CNN.txt \
-   --output_dir classification/output --device cuda:0 --dataset MNIST --num_epochs 200
+   --output_dir classification/output --device cuda:0 --dataset MNIST_rot --num_epochs 200

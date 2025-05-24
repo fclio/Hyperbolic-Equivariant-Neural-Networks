@@ -8,7 +8,7 @@ from lib.geoopt.manifolds.stereographic import PoincareBall
 from lib.lorentz.layers import LorentzMLR
 from lib.poincare.layers import UnidirectionalPoincareMLR
 
-from lib.models.cnn import Lorentz_CNN, EUCLIDEAN_CNN, equivariant_CNN,  Lorentz_equivariant_CNN # Ensure this is correctly implemented
+from lib.models.cnn_experiment import Lorentz_CNN, EUCLIDEAN_CNN, equivariant_CNN,  Lorentz_equivariant_CNN # Ensure this is correctly implemented
 
 # Define CNN model dictionary
 CNN_MODEL = {

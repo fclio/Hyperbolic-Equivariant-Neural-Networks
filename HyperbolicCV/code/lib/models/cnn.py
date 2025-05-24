@@ -3,22 +3,58 @@ import torch.nn as nn
 import torch.nn.functional as F
 from lib.lorentz.manifold import CustomLorentz
 from lib.lorentz.layers import (
-    LorentzConv2d, 
+    LorentzConv2d,
     LorentzBatchNorm1d,
-    LorentzBatchNorm2d, 
+    LorentzBatchNorm2d,
     LorentzFullyConnected,
     LorentzMLR,
-    LorentzReLU, 
+    LorentzReLU,
     LorentzGlobalAvgPool2d
 )
 from groupy.gconv.pytorch_gconv.pooling import global_max_pooling
 from groupy.gconv.pytorch_gconv import P4ConvZ2, P4ConvP4, P4MConvZ2, P4MConvP4M
 
-from lib.lorentz_equivariant.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
-from lib.lorentz_equivariant.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
-from lib.lorentz_equivariant.layers.LBnorm import GroupLorentzBatchNorm2d
-from lib.lorentz_equivariant.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+# from lib.lorentz_equivariant.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
 
+# from lib.lorentz_equivariant_v2.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant_v2.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant_v2.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant_v2.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+
+# from lib.lorentz_equivariant_v3.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant_v3.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant_v3.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant_v3.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+
+# from lib.lorentz_equivariant_v3_1.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant_v3_1.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant_v3_1.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant_v3_1.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+
+# from lib.lorentz_equivariant_v3_2.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant_v3_2.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant_v3_2.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant_v3_2.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+
+from lib.lorentz_equivariant_v4.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M, LorentzP4ConvZ2, LorentzP4ConvP4
+from lib.lorentz_equivariant_v4.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+from lib.lorentz_equivariant_v4.layers.LBnorm import GroupLorentzBatchNorm2d
+from lib.lorentz_equivariant_v4.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+
+
+# from lib.lorentz_equivariant_v4_1.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant_v4_1.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant_v4_1.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant_v4_1.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
+
+
+# from lib.lorentz_equivariant_v4_2.layers.LConv import LorentzP4MConvZ2, LorentzP4MConvP4M
+# from lib.lorentz_equivariant_v4_2.layers.LFC import GroupLorentzFullyConnected, GroupLorentzLinear
+# from lib.lorentz_equivariant_v4_2.layers.LBnorm import GroupLorentzBatchNorm2d
+# from lib.lorentz_equivariant_v4_2.layers.LModules import GroupLorentzGlobalAvgPool2d, GroupLorentzReLU
 
 equivariant_num = {
     "P4M": 8,
@@ -34,6 +70,7 @@ class CNN(nn.Module):
         self.embed_dim = embed_dim  # Set embedding dimension
         self.eq_type = eq_type
         self.img_dim = img_dim
+
 
         # **Using strided convolutions instead of MaxPool2d**
         self.conv1 = self.get_Conv2d(img_dim[0], 64, kernel_size=3, stride=2, padding=1)  # Stride 2 downsamples
@@ -65,13 +102,13 @@ class CNN(nn.Module):
         self.activation = self.get_Activation()
         self.activation_final = self.get_Activation(final=True)
 
-        # map the dimension to the num of class as final output logit [batch, num_class], 
+        # map the dimension to the num of class as final output logit [batch, num_class],
         # but if we have decoder, we don't need to do this here, it will do it later in decoder side
         if remove_linear:
             self.predictor = None
         else:
             self.predictor = self._get_predictor(self.embed_dim, num_classes)
-          
+
 
 
     def forward(self, x):
@@ -83,25 +120,28 @@ class CNN(nn.Module):
         # Shape: [batch, 32, 32, 4]
 
         # x = self.conv1(x)
-        # # print("after 1",x)
-        # x = self.bn1(x)
-        # # print("after 2",x)
-        # x = self.activation(x)
-        # print("after 3", x)
+        # print("after 1",x.shape)
 
-        # testing = self.bn4(x)
-        
+        # x = self.bn1(x)
+        # print("after 2",x.shape)
+
+
+        # x = self.activation(x)
+        # print("after 3", x.shape)
+
+
+
         x = self.activation(self.bn1(self.conv1(x)))   # Strided Conv downsamples
         # print("after",x)
         # Shape: [batch, 16, 16, 65]
         # equivariant: [batch, 64, 8, 16, 16]
         # lorenz+equivairant: [batch, 16, 16, 64 * 8 +1] = [batch, 16, 16, 513]
-        # print("shape 1:", x.shape)
+        # lorenz+equivairant v2: [128, 8, 16, 16, 65]
         # print("layer 1", x.shape)
         # layer 1 torch.Size([128, 8, 16, 16, 65])
         # print("layer 1", x)
-        
-        
+
+
         x = self.activation(self.bn2(self.conv2(x)))
         # x = self.conv2(x)
         # print("layer 2, conv3", x)
@@ -112,9 +152,11 @@ class CNN(nn.Module):
         # Shape: [batch, 8, 8, 129]
         # equivariant: [batch, 128, 8, 8, 8]
         # lorenz+equivairant: [batch, 8, 8, 128 * 8 +1] = [batch, 8, 8, 1025]
+        # lorenz+equivairant v2: [128, 8, 8, 8, 129]
+        # print("layer 2", x.shape)
         # print("layer 2", x)
         # there is one nan somewhere
-
+        # sesw
         # x = self.conv3(x)
         # print("layer 3, conv3", x)
         # x = self.bn3(x)
@@ -126,42 +168,55 @@ class CNN(nn.Module):
         # Shape: [batch, 4, 4, 257]
         # equivariant: [batch, 256, 8, 4, 4]
         # lorenz+equivairant: [batch, 4, 4, 256 * 8 +1] = [batch, 16, 16, 2048]
+        # lorenz+equivairant v2: [128, 8, 4, 4, 257]
         # print("shape 3:", x.shape)
-        # print("layer 3", x)   
+        # print("layer 3", x)
 
 
         x = self.activation(self.bn4(self.conv4(x)))
         # Shape: [batch, 2, 2, 513]
         # equivariant: [batch, 512, 8, 2, 2]
         # lorenz+equivairant: [batch, 2, 2, 513 * 8 +1] = [batch, 16, 16, 4105]
+        # lorenz+equivairant v2: [128, 8, 2, 2, 513]
         # print("shape 4:", x.shape)
-        # print("layer 4", x) 
-        
+        # print("layer 4", x)
+
         x = self.pooling(x)  # Global Pooling in Lorentz space
         # Shape: [batch, 1, 1, 513]
         # equivariant: [batch, 512, 8, 1, 1]
         # lorenz+equivairant: [batch, 2, 2, 513 * 8 +1] = [batch, 1, 1, 4105]
+        # lorenz+equivairant v2: [128, 8, 1, 1, 513]
         # print("shape 5:", x.shape)
-        # print("layer 5", x) 
+        # print("layer 5", x)
 
-        x = x.view(x.size(0), -1)  # Flatten for the fully connected (FC) layer.
+        # Concatenation for group equivariant here!!!
+        # only flattening for lorentz !!!
+        if (self.manifold is not None) and (self.eq_type is not None):
+            x = self.manifold.lorentz_flatten_group(x)
+        elif (self.manifold is not None) and (self.eq_type is None):
+            x = x.reshape(x.size(0), -1)
+        else:
+            x = x.view(x.size(0), -1)  # Flatten for the fully connected (FC) layer.
         # Shape: [batch, 513]
         # eqivariant: [batch, 512 * 8=4096]
         # lorenz+equivairant: [batch, 512 * 8 + 1=4097]
-        # print("layer 6", x) 
+        # lorenz+equivairant v2: [128, 512 * 8 + 1 = 4097]
+        # print("layer 6", x.shape)
+
 
         x = self.fc1(x) # here it reduce a dimension
         # Shape: [batch, 512]
         # print("shape 6:", x.shape)
         # eqivariant: [batch, 512]
         # lorenz+equivairant: [batch, 512]
-        # print("layer 7", x) 
+        # lorenz+equivairant: [batch, 512]
+        # print("layer 7", x.shape)
 
         x = self.activation_final(x)
         # Shape: [batch, 512]
         # eqivariant: [batch, 512]
-        # print("shape 7:", x.shape)
-        # print("layer 8", x) 
+        # print("shape 8:", x.shape)
+        # print("layer 8", x)
 
         # x = F.dropout(x, training=self.training, p=0.1) #Uses dropout (10%) for regularization.
         #  It works by randomly setting some neuron activations to zero during training
@@ -170,13 +225,14 @@ class CNN(nn.Module):
         if self.manifold is not None:
             x = self.manifold.add_time(x)  # Ensure compatibility with LorentzMLR
         # Shape: [batch, 513]
-        # print("layer 9", x)
+        # print("layer 9", x.shape)
         if self.predictor is not None:
             x = self.predictor(x)
             # Shape: [batch, 100]
-        # print("final", x)
+        # print("final", x.shape)
+
         return x
-    
+
     def _get_GlobalAveragePooling(self):
 
         if self.manifold is None:
@@ -193,7 +249,7 @@ class CNN(nn.Module):
 
         else:
             raise RuntimeError(f"Manifold {type(self.manifold)} not supported in ResNet.")
- 
+
     def _get_predictor(self, in_features, num_classes):
         if self.manifold is None:
             return nn.Linear(in_features, num_classes, bias=self.bias)
@@ -219,53 +275,67 @@ class CNN(nn.Module):
                         return P4MConvP4M(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
             else:
                 return nn.Conv2d(
-                    in_channels=in_channels, 
-                    out_channels=out_channels, 
-                    kernel_size=kernel_size, 
-                    stride=stride, 
-                    padding=padding, 
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=padding,
                     bias=bias
                 )
 
         elif type(self.manifold) is CustomLorentz:
             if self.eq_type is not None:
-                # if self.eq_type =="P4":
-                    # if in_channels == self.img_dim[0]:  # First layer operates on Z2 input
-                    #     return P4ConvZ2(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
-                    # else:  # Deeper layers operate on P4 feature maps
-                    #     return P4ConvP4(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
-                if self.eq_type =="P4M":
+                if self.eq_type =="P4":
                     if in_channels == self.img_dim[0]:  # First layer operates on Z2 input
-                        return LorentzP4MConvZ2(manifold=self.manifold, 
-                                in_channels=in_channels+1, 
-                                out_channels=out_channels+1, 
-                                kernel_size=kernel_size, 
-                                stride=stride, 
-                                padding=padding, 
-                                bias=bias, 
+                        return LorentzP4ConvZ2(manifold=self.manifold,
+                                in_channels=in_channels+1,
+                                out_channels=out_channels+1,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                bias=bias,
                                 LFC_normalize=LFC_normalize)
                     else:  # Deeper layers operate on P4 feature maps
-                        return LorentzP4MConvP4M(manifold=self.manifold, 
-                                in_channels=in_channels+1, 
-                                out_channels=out_channels+1, 
-                                kernel_size=kernel_size, 
-                                stride=stride, 
-                                padding=padding, 
-                                bias=bias, 
+                        return LorentzP4ConvP4(manifold=self.manifold,
+                                in_channels=in_channels+1,
+                                out_channels=out_channels+1,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                bias=bias,
+                                LFC_normalize=LFC_normalize)
+                if self.eq_type =="P4M":
+                    if in_channels == self.img_dim[0]:  # First layer operates on Z2 input
+                        return LorentzP4MConvZ2(manifold=self.manifold,
+                                in_channels=in_channels+1,
+                                out_channels=out_channels+1,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                bias=bias,
+                                LFC_normalize=LFC_normalize)
+                    else:  # Deeper layers operate on P4 feature maps
+                        return LorentzP4MConvP4M(manifold=self.manifold,
+                                in_channels=in_channels+1,
+                                out_channels=out_channels+1,
+                                kernel_size=kernel_size,
+                                stride=stride,
+                                padding=padding,
+                                bias=bias,
                                 LFC_normalize=LFC_normalize)
             return LorentzConv2d(
-                manifold=self.manifold, 
-                in_channels=in_channels+1, 
-                out_channels=out_channels+1, 
-                kernel_size=kernel_size, 
-                stride=stride, 
-                padding=padding, 
-                bias=bias, 
+                manifold=self.manifold,
+                in_channels=in_channels+1,
+                out_channels=out_channels+1,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=bias,
                 LFC_normalize=LFC_normalize
             )
 
     def get_BatchNorm2d(self, num_channels):
-        
+
         if self.manifold is None:
             if self.eq_type is not None:
                 if self.eq_type =="P4M":
@@ -276,7 +346,7 @@ class CNN(nn.Module):
              return nn.BatchNorm2d(num_channels)
 
         elif type(self.manifold) is CustomLorentz:
-                
+
             if self.eq_type is not None:
                 return GroupLorentzBatchNorm2d(manifold=self.manifold, num_channels=num_channels+1,input_stabilizer_size= equivariant_num[self.eq_type])
             else:

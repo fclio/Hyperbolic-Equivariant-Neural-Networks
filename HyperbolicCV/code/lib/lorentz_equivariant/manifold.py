@@ -64,7 +64,7 @@ class GroupCustomLorentz(Lorentz):
 
         time_rescaled = torch.sqrt(torch.sum(time**2, dim=-1, keepdim=True)+(((h*w)-1)/-self.k))
         x = torch.cat([time_rescaled, space], dim=-1)
-
+        print("after x", x.shape)
         return x
 
     def lorentz_reshape_img(self, x: torch.Tensor, img_dim) -> torch.Tensor:

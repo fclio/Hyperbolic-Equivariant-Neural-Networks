@@ -75,4 +75,4 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 python classification/test.py -c classification/config/E-CNN.txt \
    --mode test_accuracy --load_checkpoint classification/output/final_E-CNN_MNIST_rotation.pth \
-   --output_dir test_result --dataset MNIST_rotation
+   --output_dir test_result --dataset MNIST

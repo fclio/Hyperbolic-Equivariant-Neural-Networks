@@ -95,15 +95,18 @@ def getArguments():
     parser.add_argument('--model_type', default='resnet', type=str,
                         choices=["resnet", "cnn"],
                         help="Select a model type.")
-    
+
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                     help="Select conv model encoder manifold.")
-    
+
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1"],
+                    help="experiment_version")
+
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
                         choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot"],
                         help="Select a dataset.")
-    
+
 
 
     args = parser.parse_args()
@@ -119,7 +122,7 @@ def plot_loss_curve(train_losses, val_losses, output_dir):
     plt.figure(figsize=(8, 6))
     plt.plot(range(1, len(train_losses) + 1), train_losses, marker='o', linestyle='-', color='b', label="Training Loss")
     plt.plot(range(1, len(val_losses) + 1), val_losses, marker='s', linestyle='-', color='r', label="Validation Loss")
-    
+
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training & Validation Loss Curve")
@@ -144,7 +147,7 @@ def main(args):
 
     # Automatically detect device
     if torch.cuda.is_available():
-        device = args.device[0] 
+        device = args.device[0]
         torch.cuda.set_device(device)
         torch.cuda.empty_cache()
         print(f"Using CUDA device: {device}")
@@ -157,12 +160,15 @@ def main(args):
     print("Arguments:")
     print(args)
 
-    output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}")
+    if args.equivariant_type is not None:
+        output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}_{args.equivariant_type}")
+    else:
+        output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}")
 
     if output_dir is not None:
         if not os.path.exists(output_dir):
             print("Creating missing output directory...")
-            os.makedirs(output_dir, exist_ok=True) 
+            os.makedirs(output_dir, exist_ok=True)
 
     print("Loading dataset...")
     train_loader, val_loader, test_loader, img_dim, num_classes = select_dataset(args)
@@ -194,10 +200,10 @@ def main(args):
 
     best_acc = 0.0
     best_epoch = 0
-    
-    train_losses = []  # Store training loss per epoch 
-    val_losses = []    # Store validation loss per epoch 
-    
+
+    train_losses = []  # Store training loss per epoch
+    val_losses = []    # Store validation loss per epoch
+
     for epoch in range(start_epoch, args.num_epochs):
         model.train()
 
@@ -209,15 +215,15 @@ def main(args):
             # ------- Start iteration -------
             x = x.to(device)
             y = y.to(device)
-        
+
             logits = model(x)
-       
+
             loss = criterion(logits, y)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-   
+
             with torch.no_grad():
                 top1, top5 = accuracy(logits, y, topk=(1, 5))
                 losses.update(loss.item())
@@ -225,9 +231,9 @@ def main(args):
                 acc5.update(top5.item())
 
             global_step += 1
-       
+
             # ------- End iteration -------
-     
+
         # ------- Start validation and logging -------
         with torch.no_grad():
             if lr_scheduler is not None:
@@ -242,10 +248,10 @@ def main(args):
             print(
                 "Epoch {}/{}: Loss={:.4f}, Acc@1={:.4f}, Acc@5={:.4f}, Validation: Loss={:.4f}, Acc@1={:.4f}, Acc@5={:.4f}".format(
                     epoch + 1, args.num_epochs, losses.avg, acc1.avg, acc5.avg, loss_val, acc1_val, acc5_val))
-            
-            train_losses.append(losses.avg)  # Store average loss for this epoch 
-            val_losses.append(loss_val)  # Store average loss for this epoch 
-            
+
+            train_losses.append(losses.avg)  # Store average loss for this epoch
+            val_losses.append(loss_val)  # Store average loss for this epoch
+
             # Testing for best model
             if acc1_val > best_acc:
                 best_acc = acc1_val
@@ -263,11 +269,11 @@ def main(args):
 
     print("-----------------\nTraining finished\n-----------------")
     print("Best epoch = {}, with Acc@1={:.4f}".format(best_epoch, best_acc))
-    plot_loss_curve(train_losses, val_losses, output_dir) 
-    
+    plot_loss_curve(train_losses, val_losses, output_dir)
+
     if args.output_dir is not None:
-        save_path = output_dir + "/final_model.pth" 
-  
+        save_path = output_dir + "/final_model.pth"
+
         torch.save({
             'model': model.module.state_dict(),
             'optimizer': optimizer.state_dict(),
@@ -288,7 +294,7 @@ def main(args):
     print("Testing best model...")
     if args.output_dir is not None:
         print("Loading best model...")
-        save_path = output_dir + "/final_model.pth" 
+        save_path = output_dir + "/final_model.pth"
         checkpoint = torch.load(save_path, map_location=device)
         model.module.load_state_dict(checkpoint['model'], strict=True)
 
@@ -332,7 +338,7 @@ def evaluate(model, dataloader, criterion, device):
         acc1.update(top1.item(), x.shape[0])
         acc5.update(top5.item(), x.shape[0])
 
-    return losses.avg, acc1.avg, acc5.avg 
+    return losses.avg, acc1.avg, acc5.avg
 
 
 # ----------------------------------
@@ -352,4 +358,3 @@ if __name__ == '__main__':
 
 
     main(args)
-    

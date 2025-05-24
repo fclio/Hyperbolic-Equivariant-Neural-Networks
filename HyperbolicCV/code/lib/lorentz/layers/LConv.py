@@ -193,7 +193,8 @@ class LorentzConv2d(nn.Module):
         # patches = (batch_size,  windows, channels * elements/window)
         # patches = torch.Size([128, 256, 18])
         
-
+        #  each spatial position (k_size, k_size) in kernel size * kernel size is considered as an individual hyperbolic point (or “hyperbolic ball”),
+        #  and you have a total of k_size * k_size such hyperbolic points per example in the batch.
 
         ## step 3： extract the time component from patches and treat them separately
         # Apply Lorentz Concatenation (Qu et al., 2022)
@@ -229,6 +230,9 @@ class LorentzConv2d(nn.Module):
         patches_pre_kernel = torch.concat((patches_time_rescaled, patches_space), dim=-1)
         # patches = (batch_size, num_patches, 1(time) + [channels(-1) * kernel_height * kernel_width])
         # pathes: torch.Size([128, 256, 10])
+
+        # print("patches", patches.shape)
+        # print("patches_pre_kernel", patches_pre_kernel.shape)
 
         # step 6: Apply Lorentz Fully Connected Layer
         out = self.linearized_kernel(patches_pre_kernel)

@@ -19,7 +19,7 @@ module load 2024
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-python test.py -c classification/config/L-ResNet18.txt \
-   --mode visualize_embeddings --load_checkpoint classification/output/final_L-ResNet18.pth \
-   --output_dir classification/evaluation_output
-  
+python classification/test.py -c classification/config/LEQE-CNN-2.txt \
+   --mode visualize_embeddings --load_checkpoint classification/output/v2/LEQE-CNN_MNIST_rot_epoch:200/final_model.pth \
+   --output_dir classification/evaluation_output/LEQE-2 \
+   --dataset MNIST

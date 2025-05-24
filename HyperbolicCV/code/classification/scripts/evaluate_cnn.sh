@@ -19,6 +19,7 @@ module load 2024
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-python classification/test.py -c classification/config/L-CNN.txt \
-   --mode test_accuracy --load_checkpoint classification/output/cifar100_200ep/final_CNN.pth
-  
+python classification/test.py -c classification/config/LEQE-CNN-4.txt \
+   --mode test_accuracy --load_checkpoint classification/output/LEQE-CNN-4_MNIST_rot_epoch:10/final_model.pth \
+   --num_epochs 10 \
+   --dataset MNIST --output_dir test_result

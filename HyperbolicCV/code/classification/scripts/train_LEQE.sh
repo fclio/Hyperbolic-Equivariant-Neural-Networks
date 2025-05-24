@@ -17,7 +17,7 @@ module load 2024
 # pip install -r requirements.txt
 # seem like without requirement.txt still runable
 
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 python classification/train.py -c classification/config/LEQE-CNN.txt \
-   --output_dir classification/output --device cuda:0 --dataset MNIST_rot --num_epochs 200
+   --output_dir classification/output/v2 --device cuda:0 --dataset MNIST_rot --num_epochs 10 --equivariant_type P4

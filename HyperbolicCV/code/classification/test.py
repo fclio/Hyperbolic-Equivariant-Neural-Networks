@@ -13,7 +13,7 @@ import json
 import torch
 import torch.nn.functional as F
 from torch.nn import DataParallel
-
+from os.path import join
 import configargparse
 
 import random
@@ -25,6 +25,7 @@ from utils.initialize import select_dataset, select_model, load_model_checkpoint
 from lib.utils.visualize import visualize_embeddings
 from train import evaluate
 
+from lib.utils.equivariant_test.test_equivariant import *
 from lib.utils.utils import AverageMeter, accuracy
 
 def getArguments():
@@ -41,7 +42,8 @@ def getArguments():
                             "test_accuracy",
                             "visualize_embeddings",
                             "fgsm",
-                            "pgd"
+                            "pgd",
+                            "test_equivairant"
                         ],
                         help = "Select the testing mode.")
     
@@ -64,15 +66,16 @@ def getArguments():
                         help="Training batch size.")
     parser.add_argument('--batch_size_test', default=128, type=int, 
                         help="Testing batch size.")
-
+    parser.add_argument('--num_epochs', default=200, type=int,
+                        help="Number of training epochs.")
     # Model selection
     parser.add_argument('--num_layers', default=18, type=int, choices=[18, 50], 
                         help = "Number of layers in ResNet.")
     parser.add_argument('--embedding_dim', default=512, type=int, 
                         help = "Dimensionality of classification embedding space (could be expanded by ResNet)")
-    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz"], 
+    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "lorentz_equivariant"], 
                         help = "Select conv model encoder manifold.")
-    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "poincare"], 
+    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "poincare","lorentz_equivariant"], 
                         help = "Select conv model decoder manifold.")
     
     parser.add_argument('--model_type', default='resnet', type=str,
@@ -93,12 +96,15 @@ def getArguments():
     parser.add_argument('--dataset', default='CIFAR-100', type=str, choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot"], 
                         help = "Select a dataset.")
 
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5"],
+                    help="experiment_version")
 
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                 help="Select conv model encoder manifold.")
     args, _ = parser.parse_known_args()
 
     return args
+
 
 def save_results_as_json(results, output_path):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -151,6 +157,7 @@ def main(args):
             "acc@1": acc1_test,
             "acc@5": acc5_test
         }
+    
         
     elif args.mode=="visualize_embeddings":
         print("Visualizing embedding space of model...")
@@ -171,9 +178,15 @@ def main(args):
     else:
         print(f"Mode {args.mode} not implemented yet.")
 
-    print("Finished!")
-    output_path = os.path.join(args.output_dir, f"{args.exp_name}_test_{args.dataset}.json")
-    save_results_as_json(results, output_path)
+    if args.mode=="test_equivairant":
+        path = join("equivariant_test",f"{args.exp_name}-epoch:{args.num_epochs}-{args.exp_v}")
+        # test_equivariance(model, test_loader, device, path, args.exp_name )
+        tester = EquivarianceTester(model, device, exp_v=args.exp_v, save_path=path,model_type= args.exp_name)
+        tester.test_model(test_loader)
+    else:
+        print("Finished!")
+        output_path = os.path.join(args.output_dir, f"{args.exp_name}{args.exp_v}-epoch:{args.num_epochs}_test_{args.dataset}.json")
+        save_results_as_json(results, output_path)
     
 
 

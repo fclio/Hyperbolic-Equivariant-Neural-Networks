@@ -34,4 +34,4 @@ clip_features = 1.0  # Prevents numerical instability
 equivariant_type = P4M
 
 # Dataset settings
-# dataset = CIFAR-10  # Options: CIFAR-10, CIFAR-100, Tiny-ImageNet
+# dataset = MNIST_rot  # Options: CIFAR-10, CIFAR-100, Tiny-ImageNet

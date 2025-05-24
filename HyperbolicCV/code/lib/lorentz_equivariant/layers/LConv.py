@@ -185,3 +185,17 @@ class LorentzP4MConvP4M(GroupLorentzConv2d):
 
     def __init__(self, *args, **kwargs):
         super(LorentzP4MConvP4M, self).__init__(input_stabilizer_size=8, output_stabilizer_size=8, *args, **kwargs)
+
+
+
+
+class LorentzP4ConvZ2(GroupLorentzConv2d):
+
+    def __init__(self, *args, **kwargs):
+        super(LorentzP4ConvZ2, self).__init__(input_stabilizer_size=1, output_stabilizer_size=4, *args, **kwargs)
+
+
+class LorentzP4ConvP4(GroupLorentzConv2d):
+
+    def __init__(self, *args, **kwargs):
+        super(LorentzP4ConvP4, self).__init__(input_stabilizer_size=4, output_stabilizer_size=4, *args, **kwargs)
