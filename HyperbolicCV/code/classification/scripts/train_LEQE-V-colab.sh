@@ -9,12 +9,12 @@
 #SBATCH --time=80:00:00
 #SBATCH --output=slurm_output/train_LEQECNN_MNIST_%A.out
 
-module purge
-module load 2024
+# module purge
+# module load 2024
 # module load PyTorch/2.1.2-foss-2023a-CUDA-12.1.1
 # seem have no use
 
-# pip install -r requirements.txt
+pip install -r requirements.txt
 # seem like without requirement.txt still runable
 
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
