@@ -236,7 +236,7 @@ class CNN(nn.Module):
             x = self.predictor(x)
             # Shape: [batch, 100]
         # print("final", x.shape)
-        dede
+        
 
         return x
 
