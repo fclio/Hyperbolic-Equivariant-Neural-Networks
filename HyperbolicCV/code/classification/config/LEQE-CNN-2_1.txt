@@ -1,0 +1,42 @@
+# Output settings
+exp_name = LEQE-CNN-2_1
+exp_v = v2_1
+# output_dir = classification/output
+
+# General settings
+device = cuda:0
+dtype = float32
+seed = 1
+#load_checkpoint = classification/output/LEQE-CNN.pth
+
+# General training hyperparameters
+num_epochs = 200
+batch_size = 128
+lr = 1e-1
+weight_decay = 5e-4
+optimizer = RiemannianSGD
+use_lr_scheduler = True
+lr_scheduler_milestones = [60,120,160]
+lr_scheduler_gamma = 0.2
+
+# General validation/testing hyperparameters
+batch_size_test = 128
+
+# Model selection
+model_type = cnn
+
+# Manifold settings
+embedding_dim = 512
+
+encoder_manifold = lorentz_equivariant # Options: euclidean, poincare, lorentz
+decoder_manifold = lorentz_equivariant  # Options: euclidean, poincare, lorentz
+
+encoder_k = 1.0
+decoder_k = 1.0
+
+clip_features = 1.0  # Prevents numerical instability
+
+equivariant_type = P4M
+
+# Dataset settings
+# dataset = CIFAR-10  # Options: CIFAR-10, CIFAR-100, Tiny-ImageNet

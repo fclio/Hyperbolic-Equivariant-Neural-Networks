@@ -42,6 +42,7 @@ def import_equivariant_layers(exp_v):
         LFC = importlib.import_module(f"{base_module}{version_suffix}.layers.LFC")
         LBnorm = importlib.import_module(f"{base_module}{version_suffix}.layers.LBnorm")
         LModules = importlib.import_module(f"{base_module}{version_suffix}.layers.LModules")
+        original_LFC = importlib.import_module(f"{base_module}_v2.layers.LFC")
     except ModuleNotFoundError as e:
         raise ImportError(f"Could not import equivariant layers for exp_v={exp_v}: {e}")
 
@@ -51,7 +52,7 @@ def import_equivariant_layers(exp_v):
         'LorentzP4ConvZ2': getattr(LConv, 'LorentzP4ConvZ2'),
         'LorentzP4ConvP4': getattr(LConv, 'LorentzP4ConvP4'),
         'GroupLorentzFullyConnected': getattr(LFC, 'GroupLorentzFullyConnected'),
-        'GroupLorentzLinear': getattr(LFC, 'GroupLorentzLinear'),
+        'GroupLorentzLinear': getattr(original_LFC, 'GroupLorentzLinear'),
         'GroupLorentzBatchNorm2d': getattr(LBnorm, 'GroupLorentzBatchNorm2d'),
         'GroupLorentzGlobalAvgPool2d': getattr(LModules, 'GroupLorentzGlobalAvgPool2d'),
         'GroupLorentzReLU': getattr(LModules, 'GroupLorentzReLU'),
@@ -196,9 +197,11 @@ class CNN(nn.Module):
         # Concatenation for group equivariant here!!!
         # only flattening for lorentz !!!
         if (self.manifold is not None) and (self.eq_type is not None):
-            if self.exp_v == "v2":
+            # was only set for v2 case
+            if x.ndim == 5:
                 x = self.manifold.lorentz_flatten_group(x)
                 # print("flattern", x.shape)
+                # dede
             else:
                 x = x.reshape(x.size(0), -1)
         else:
@@ -237,6 +240,7 @@ class CNN(nn.Module):
             # Shape: [batch, 100]
         # print("final", x.shape)
         
+        # dede
 
         return x
 

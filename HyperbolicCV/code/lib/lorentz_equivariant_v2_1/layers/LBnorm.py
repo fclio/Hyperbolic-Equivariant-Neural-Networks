@@ -5,7 +5,6 @@ import json
 from lib.lorentz_equivariant.utils import get_group_channels
 from lib.geoopt import ManifoldParameter
 from lib.lorentz.manifold import CustomLorentz
-from lib.lorentz.layers import LorentzConv2d, LorentzBatchNorm1d
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -93,22 +92,18 @@ class GroupLorentzBatchNorm2d(GroupLorentzBatchNorm):
     def forward(self, x, momentum=0.1):
         """ x has to be in channel last representation -> Shape = bs x H x W x C """
         bs, g, h, w, c = x.shape
-        # print(bs, h, w, c)
+        # print("before:", x.shape)
         
-        x = x.permute(1, 0, 2, 3, 4)
-
-        list_x = []
-        for x_group in x:
-            x_group = x_group.contiguous().view(bs, -1, c)  # Flatten groups into one batch
-          
-            x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
-            
-            x_group = x_group.view(bs, h, w, c)
-
-            list_x.append(x_group)
+        x_group = self.manifold.lorentz_flatten_group_dimension(x)
+  
+        x_group = x_group.contiguous().view(bs, -1, g*(c-1)+1)  # Flatten groups into one batch
+    
+        x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
         
-        x = torch.stack(list_x, dim=0) 
-        x = x.permute(1, 0, 2, 3, 4)
+        x_group = x_group.view(bs, h, w, g*(c-1)+1)
+
+        x = self.manifold.lorentz_split_batch(x_group, g)
+        # print("after:", x.shape)
         return x
     
     def test(self, x, momentum):

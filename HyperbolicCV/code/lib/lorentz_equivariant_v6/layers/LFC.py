@@ -275,7 +275,7 @@ class GroupLorentzLinear(nn.Module):
         self.normalize = normalize
         self.input_stabilizer_size = input_stabilizer_size
 
-        self.lin_features = (in_channels) * self.input_stabilizer_size
+        self.lin_features = (in_channels-1) * self.input_stabilizer_size+1
 
         self.weight = Parameter(torch.Tensor(
             self.out_channels, self.lin_features), requires_grad=True)
