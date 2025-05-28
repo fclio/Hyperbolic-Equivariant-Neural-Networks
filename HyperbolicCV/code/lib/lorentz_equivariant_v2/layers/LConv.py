@@ -93,7 +93,7 @@ class GroupLorentzConv2d(nn.Module):
     # i need to keep the weight for each as well? 
     def reset_parameters(self):
         # print(self.in_channels)
-        stdv = math.sqrt(2.0 / ((self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]))
+        stdv = math.sqrt(2.0 / ((self.in_channels_original - 1) * self.kernel_size[0] * self.kernel_size[1]))
 
         # Initialize weight tensors
         self.linearized_kernel.weight_space.data.uniform_(-stdv, stdv)

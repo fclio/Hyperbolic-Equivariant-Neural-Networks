@@ -99,13 +99,14 @@ def getArguments():
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                     help="Select conv model encoder manifold.")
 
-    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1"],
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v7","v8"],
                     help="experiment_version")
 
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
-                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot"],
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt"],
                         help="Select a dataset.")
+
 
 
 

@@ -151,7 +151,7 @@ class GroupLorentzConv2d(nn.Module):
 
     def reset_parameters(self):
         # print(self.in_channels)
-        stdv = math.sqrt(2.0 / (((self.in_channels-1) * self.input_stabilizer_size)
+        stdv = math.sqrt(2.0 / ((self.in_channels-1)
                                 * self.kernel_size[0] * self.kernel_size[1]))
 
         # Initialize weight tensors

@@ -100,11 +100,29 @@ class GroupLorentzBatchNorm2d(GroupLorentzBatchNorm):
     
         x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
         
-        x_group = x_group.view(bs, h, w, g*(c-1)+1)
+        x = x_group.view(bs, h, w, g*(c-1)+1)
 
-        x = self.manifold.lorentz_split_batch(x_group, g)
-        # print("after:", x.shape)
+        # x = self.manifold.lorentz_split_batch(x, g)
+
         return x
+        # print("after:", x.shape)
+
+        # x = x.permute(1, 0, 2, 3, 4)
+
+        # list_x = []
+        # for x_group in x:
+        #     x_group = x_group.contiguous().view(bs, -1, c)  # Flatten groups into one batch
+          
+        #     x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
+            
+        #     x_group = x_group.view(bs, h, w, c)
+
+        #     list_x.append(x_group)
+        
+        # x = torch.stack(list_x, dim=0) 
+        # x = x.permute(1, 0, 2, 3, 4)
+
+        # return x
     
     def test(self, x, momentum):
         with open("error.json", "r") as f:

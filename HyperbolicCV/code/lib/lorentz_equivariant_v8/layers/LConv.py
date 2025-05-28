@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from torch.nn import Parameter
 import math
 import numpy as np
 from lib.lorentz.manifold import CustomLorentz
-from lib.lorentz_equivariant_v5.layers.LFC import GroupLorentzFullyConnected
+from lib.lorentz_equivariant_v6.layers.LFC import GroupLorentzFullyLinear
 from groupy.gconv.make_gconv_indices import *
 
 make_indices_functions = {(1, 4): make_c4_z2_indices,
@@ -13,6 +13,59 @@ make_indices_functions = {(1, 4): make_c4_z2_indices,
                           (1, 8): make_d4_z2_indices,
                           (8, 8): make_d4_p4m_indices}
 
+
+
+def trans_filter(w, inds):
+
+    inds_reshape = inds.reshape((-1, inds.shape[-1])).astype(np.int64)
+    w_indexed = w[:, :, inds_reshape[:, 0].tolist(), inds_reshape[:, 1].tolist(), inds_reshape[:, 2].tolist()]
+
+    w_indexed = w_indexed.view(w_indexed.size()[0], w_indexed.size()[1],
+                                    inds.shape[0], inds.shape[1], inds.shape[2], inds.shape[3])
+
+    w_transformed = w_indexed.permute(0, 2, 1, 3, 4, 5)
+
+    return w_transformed.contiguous()
+
+
+
+def combine_weight_kernel(tw_space, w_time_output, w_time_input, device):
+    out_channels, output_stabilizer_size, in_channels, input_stabilizer_size, kernel_size1, kernel_size2 = tw_space.size()
+    assert kernel_size1 == kernel_size2, "Only square kernels supported"
+
+    kernel_size = kernel_size1
+    out_channels += 1
+    in_channels += 1
+
+    tw_shape = ((out_channels - 1), output_stabilizer_size, (in_channels - 1), input_stabilizer_size, kernel_size * kernel_size)
+    tw_space = tw_space.view(tw_shape)
+
+    tw_space = tw_space.permute(1, 0, 3, 2, 4)
+
+    tw_shape = (output_stabilizer_size, (out_channels - 1), input_stabilizer_size, (in_channels - 1) * kernel_size * kernel_size)
+    tw_space = tw_space.reshape(tw_shape)
+
+    time_output_repeated = w_time_output.detach().repeat(output_stabilizer_size, 1, 1, 1)
+    for i in range(output_stabilizer_size):
+        time_output_repeated[i] = time_output_repeated[i].roll(i, dims=1)  # Example reorder logic
+
+    # Concatenate along dim=1 (channel dimension)
+    tw_space = torch.cat([time_output_repeated.to(device), tw_space.to(device)], dim=1)
+
+    time_input_expanded = w_time_input.unsqueeze(0).repeat(output_stabilizer_size, 1, 1, 1)
+
+    for i in range(output_stabilizer_size):
+        time_input_expanded[i] = time_input_expanded[i].roll(i, dims=1)  # Example reorder logic
+
+    tw = torch.cat([time_input_expanded.to(device), tw_space.to(device)], dim=-1)
+
+    output_stabilizer_size, out_channels, input_stabilizer_size, rest = tw.size()
+    tw_shape = (output_stabilizer_size, out_channels, input_stabilizer_size * rest)
+    tw_space = tw.reshape(tw_shape)
+
+    return tw_space.contiguous()
+
+    
 class GroupLorentzConv2d(nn.Module):
 
     def __init__(
@@ -30,13 +83,13 @@ class GroupLorentzConv2d(nn.Module):
             LFC_normalize=False
     ):
         super(GroupLorentzConv2d, self).__init__()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.input_stabilizer_size=input_stabilizer_size
         self.output_stabilizer_size=output_stabilizer_size
         self.manifold = manifold
         # space channel + time
-        self.in_channels_original = in_channels
+        self.in_channels= in_channels
         # space channel * input + time
-        self.in_channels = (in_channels-1)*self.input_stabilizer_size + 1
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.padding = padding
@@ -62,48 +115,53 @@ class GroupLorentzConv2d(nn.Module):
         else:
             self.dilation = dilation
 
-        # here need to reconsider for group!!!
-        # for nn.linear, the kernel is also flatten ad contained in the input as linear, not as sliding windows
         self.kernel_len = self.kernel_size[0] * self.kernel_size[1]
-        lin_features = ((self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]) + 1
-
-        # Instead of using a standard linear layer, this uses LorentzFullyConnected to preserve hyperbolic properties.
-        self.linearized_kernel = GroupLorentzFullyConnected(
-            manifold,
-            lin_features=lin_features,
-            out_channels=self.out_channels,
-            in_channels=self.in_channels_original,
-            kernel_size=self.kernel_size,
-            input_stabilizer_size= self.input_stabilizer_size,
-            output_stabilizer_size= self.output_stabilizer_size,
-            bias=bias,
-            normalize=LFC_normalize
-        )
 
         self.unfold = torch.nn.Unfold(kernel_size=(self.kernel_size[0], self.kernel_size[1]), dilation=dilation, padding=padding, stride=stride)
 
-        self.reset_parameters()
 
         self.inds = self.make_transformation_indices()
+
+        self.weight_space = Parameter(torch.Tensor(self.out_channels-1, self.in_channels-1, self.input_stabilizer_size, self.kernel_size[0] , self.kernel_size[1]), requires_grad=True)
+        self.w_time_output = Parameter(torch.Tensor(
+            1, 1, self.input_stabilizer_size, (self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]), requires_grad=True)
+        self.w_time_input = Parameter(torch.Tensor(
+            self.out_channels, self.input_stabilizer_size, 1), requires_grad=True)
+
+        if bias:
+            self.bias = nn.Parameter(torch.Tensor(self.out_channels), requires_grad=True)
+        else:
+            self.bias = None
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+        self.heads = nn.ModuleList([
+           GroupLorentzFullyLinear(
+            manifold,
+            bias=bias,
+            normalize=LFC_normalize
+            ) for _ in range(self.output_stabilizer_size)
+        ])
+
+
     def make_transformation_indices(self):
-        # to understand later!
         return make_indices_functions[(self.input_stabilizer_size, self.output_stabilizer_size)](self.kernel_size[1])
 
-    # where and when to update? do
-    # i need to keep the weight for each as well?
     def reset_parameters(self):
         # print(self.in_channels)
-        stdv = math.sqrt(2.0 / ((self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]))
+        stdv = math.sqrt(2.0 / (((self.in_channels-1) * self.input_stabilizer_size)
+                                * self.kernel_size[0] * self.kernel_size[1]))
 
         # Initialize weight tensors
-        self.linearized_kernel.weight_space.data.uniform_(-stdv, stdv)
-        self.linearized_kernel.weight_time_output.data.uniform_(-stdv, stdv)
-        self.linearized_kernel.weight_time_input.data.uniform_(-stdv, stdv)
+        self.weight_space.data.uniform_(-stdv, stdv)
+        self.w_time_output.data.uniform_(-stdv, stdv)
+        self.w_time_input.data.uniform_(-stdv, stdv)
 
         # Initialize bias terms if present
 
-        if self.bias:
-            self.linearized_kernel.bias.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
 
 
 
@@ -136,10 +194,21 @@ class GroupLorentzConv2d(nn.Module):
             patches_pre_kernel = self.extract_lorentz_patches(patches)
 
         else:
-            # bsz, g, h, w, c
+
+            # x = self.manifold.lorentz_flatten_group_dimension(x)
+            # bsz, h, w, (c-1)*9+1
+            # print("x shape", x.shape)
+
+            # x = x.permute(0, 3, 1, 2)
+            # patches = self.unfold(x)
+            # patches = patches.permute(0, 2, 1)
+            # # print("patches (layer 1) shape", patches.shape)
+            # patches_pre_kernel = self.extract_lorentz_patches(patches)
+
+            # print("patches", patches_pre_kernel.shape)
+
             x = x.permute(1, 0, 4, 2, 3)
             # print("x (layer 2) shape", x.shape)
-
             patches_pre_kernel = []
             for group_x in x:
                 # print("group_shape", group_x.shape)
@@ -152,28 +221,33 @@ class GroupLorentzConv2d(nn.Module):
             # print("patches (3)", patches_pre_kernel.shape)
             g, bsz, num_p, in_c = patches_pre_kernel.size()
             patches_pre_kernel = patches_pre_kernel.permute(1,2,0,3)
-            #bsz, num_p, g, in_c
-
-            patches_pre_kernel = self.manifold.lorentz_flatten_group_patches(patches_pre_kernel)
             # print("patches (4)", patches_pre_kernel.shape)
-            #!!!# hyperbolic concatenation
-            # patches_pre_kernel = patches_pre_kernel.reshape(bsz, num_p, g * in_c)
+            patches_pre_kernel = patches_pre_kernel.reshape(bsz, num_p, g * in_c)
             # print("patches (5)", patches_pre_kernel.shape)
+           
 
-            #can concateneate into a big ball???
+        tw_space = trans_filter(self.weight_space, self.inds)
 
-        out = self.linearized_kernel(patches_pre_kernel)  # Apply the linear layer to each patch
+        weight_list = combine_weight_kernel(tw_space, self.w_time_output, self.w_time_input, self.device)
+        # print("weight", weight_list[0].shape)
+
+
+        outs = [head(patches_pre_kernel, weight) for head, weight in zip(self.heads, weight_list)]
+
+         # Stack along a new “head” dimension: [B, P, num_heads, K, out_ch]
+        out = torch.stack(outs, dim=0)
 
         # hyperbolic splittting!!!
         # print("out in conv2d",out.shape)
 
-        out = self.manifold.lorentz_split_patches(out)
-        print("out shape", out.shape)
+        # out = self.manifold.lorentz_split_patches(out, self.output_stabilizer_size)
+        # print("out shape", out.shape)
         # bs, num, g, c
         # print(" output", out.shape)
+        out = out.permute(1,0,2,3)
+        out = out.view(bsz, self.output_stabilizer_size, h_out, w_out, self.out_channels)
 
-        out = out.view(bsz, h_out, w_out, self.output_stabilizer_size, self.out_channels)
-        out = out.permute(0,3,1,2,4)
+        # print("final", out.shape)
         #(batch size, image_height, image_wedith, space channel + transformed space channel + time channels)
 
         return out
@@ -191,7 +265,7 @@ class GroupLorentzConv2d(nn.Module):
         # torch.Size([128, 256, 9])
 
 
-        patches_space = patches_space.reshape(patches_space.shape[0], patches_space.shape[1], self.in_channels_original - 1, -1).transpose(-1, -2).reshape(patches_space.shape)
+        patches_space = patches_space.reshape(patches_space.shape[0], patches_space.shape[1], self.in_channels - 1, -1).transpose(-1, -2).reshape(patches_space.shape)
         # torch.Size([128, 256, 9])
 
         ## step 5: Concatenates the rescaled time component and spatial components to maintain hyperbolic consistency
@@ -215,3 +289,16 @@ class LorentzP4MConvP4M(GroupLorentzConv2d):
 
     def __init__(self, *args, **kwargs):
         super(LorentzP4MConvP4M, self).__init__(input_stabilizer_size=8, output_stabilizer_size=8, *args, **kwargs)
+
+
+
+class LorentzP4ConvZ2(GroupLorentzConv2d):
+
+    def __init__(self, *args, **kwargs):
+        super(LorentzP4ConvZ2, self).__init__(input_stabilizer_size=1, output_stabilizer_size=4, *args, **kwargs)
+
+
+class LorentzP4ConvP4(GroupLorentzConv2d):
+
+    def __init__(self, *args, **kwargs):
+        super(LorentzP4ConvP4, self).__init__(input_stabilizer_size=4, output_stabilizer_size=4, *args, **kwargs)

@@ -60,12 +60,45 @@ class GroupCustomLorentz(Lorentz):
         bs,h,w,c = x.shape
         # bs x H x W x C
         time = x.narrow(-1, 0, 1).view(-1, h*w)
+        # print("time", time.shape)
+
         space = x.narrow(-1, 1, x.shape[-1] - 1).flatten(start_dim=1) # concatenate all x_s
+        # print("space", space.shape)
 
         time_rescaled = torch.sqrt(torch.sum(time**2, dim=-1, keepdim=True)+(((h*w)-1)/-self.k))
+
         x = torch.cat([time_rescaled, space], dim=-1)
 
         return x
+
+
+    def lorentz_flatten_group(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Lorentz flattening over group, height, and width dimensions.
+        Input shape: (bs, g, h, w, c)
+        Output shape: (bs, 1 + (g * h * w) * (c - 1))
+        """
+        bs, g, h, w, c = x.shape
+
+        # Extract time component (first dim of Lorentz vector)
+        time = x[..., 0]  # (bs, g, h, w)
+
+        # Flatten space component (rest of Lorentz vector)
+        space = x[..., 1:]  # (bs, g, h, w, c-1)
+        space = space.reshape(bs, -1)  # (bs, g * h * w * (c - 1))
+
+        # Rescale time to preserve Lorentz norm
+        time = time.reshape(bs, -1)  # (bs, g * h * w)
+        time_squared = torch.sum(time**2, dim=-1, keepdim=True)  # (bs, 1)
+
+        num_vectors = g * h * w
+        time_rescaled = torch.sqrt(time_squared + ((num_vectors - 1) / -self.k))  # (bs, 1)
+
+        # Concatenate new time with flattened space
+        x_flat = torch.cat([time_rescaled, space], dim=-1)  # (bs, 1 + g * h * w * (c - 1))
+
+        return x_flat
+
 
     def lorentz_reshape_img(self, x: torch.Tensor, img_dim) -> torch.Tensor:
         """ Implements reshaping a flat tensor to an image directly on the manifold. Based on Lorentz Direct Split (Qu et al., 2022) """

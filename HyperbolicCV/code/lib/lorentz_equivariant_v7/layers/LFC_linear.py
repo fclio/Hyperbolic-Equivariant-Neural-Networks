@@ -13,8 +13,6 @@ make_indices_functions = {(1, 4): make_c4_z2_indices,
 def trans_filter(w, inds):
     
     inds_reshape = inds.reshape((-1, inds.shape[-1])).astype(np.int64)
-    #  step 2: this remaps the filter weights based on the transformation indices.
-    # !!! here is a special index finding will become w(:,:, len(n-dimension_list matching follow select base on index))
     w_indexed = w[:, :, inds_reshape[:, 0].tolist(), inds_reshape[:, 1].tolist(), inds_reshape[:, 2].tolist()]
 
     w_indexed = w_indexed.view(w_indexed.size()[0], w_indexed.size()[1],
@@ -24,6 +22,7 @@ def trans_filter(w, inds):
  
     return w_transformed.contiguous()
 
+
 def combine_weight_kernel(tw_space, w_time_output, w_time_input, device):
 
     out_channels, output_stabilizer_size, in_channels, input_stabilizer_size,  kernel_size, kernel_size = tw_space.size()
@@ -31,46 +30,32 @@ def combine_weight_kernel(tw_space, w_time_output, w_time_input, device):
     out_channels += 1
     in_channels += 1
 
-    tw_shape = ((out_channels-1) * output_stabilizer_size ,
-                    (in_channels-1) * input_stabilizer_size *kernel_size* kernel_size)
-    tw_space_linear = tw_space.view(tw_shape)
+    tw_shape = ((out_channels-1), output_stabilizer_size ,
+                    (in_channels-1), input_stabilizer_size,  kernel_size* kernel_size)
+    tw_space = tw_space.view(tw_shape)
 
-    # print("tw linear", tw_space_linear.size())
-    # Create new tensor with expanded shape
-    
-    w_time_output_linear = torch.zeros((1, in_channels-1, input_stabilizer_size,  kernel_size * kernel_size))
-    w_time_output_linear[:, :, 0, :] = w_time_output # Keep only first slice, rest remain zero
-    w_time_output_linear = w_time_output_linear.view(1, (in_channels-1)* input_stabilizer_size *(kernel_size* kernel_size))
+    tw_space = tw_space.permute(1, 0, 3, 2, 4)
 
+    tw_shape = (output_stabilizer_size , (out_channels-1),
+                    input_stabilizer_size, (in_channels-1) * kernel_size* kernel_size)
+    tw_space = tw_space.reshape(tw_shape)
 
-    tw_linear = torch.cat([w_time_output_linear.to(device), tw_space_linear.to(device)], dim=0)
+    output_stabilizer_size, out_channels, input_stabilizer_size, rest = tw_space.size()
+    tw_shape = (output_stabilizer_size * out_channels,
+                    input_stabilizer_size * rest)
+    tw = tw_space.reshape(tw_shape)
 
-    new_shape = ((out_channels - 1) * output_stabilizer_size) + 1  
-    w_time_input_linear = torch.ones(new_shape, 1, device = device)  # Create new tensor
-    w_time_input_linear[0, :] = w_time_input[0]
-    w_time_input_linear[1:, :] = w_time_input[1:].repeat_interleave(output_stabilizer_size, dim=0)
+    time_input_expanded = w_time_input.detach().repeat(output_stabilizer_size, 1, 1)
+    time_input_expanded = time_input_expanded.view(output_stabilizer_size*out_channels, 1)
+    # Concatenate along dim=1 (channel dimension)
+    tw_space = torch.cat([time_input_expanded.to(device), tw.to(device)], dim=1)
 
-    # Append horizontal zeros (trainable part)
-    # print("horionzal", w_time_input_linear.size())
-    # print("tw linear", tw_linear.size())
-    tw = torch.cat([ w_time_input_linear.to(device),tw_linear.to(device)], dim=1)
+    tw_space = torch.cat([ w_time_output.to(device), tw_space.to(device)], dim=0)
 
     return tw.contiguous()
 
 
-def combine_weight_linear(tw_space, w_time_output, input_stabilizer_size,device):
-    out_channels, in_channels = tw_space.size()
- 
-    # Create an empty tensor filled with zeros
-    output_tensor = torch.zeros((1, in_channels), device=device)
 
-    # Place the values at the correct positions
-    output_tensor[0][0] = w_time_output[0][0]
-    output_tensor[0, 1::(input_stabilizer_size)] = w_time_output[0, 1:]
-
-    tw = torch.cat([output_tensor.to(device), tw_space.to(device)], dim=0)
- 
-    return tw.contiguous()
 
 class GroupLorentzFullyConnected(nn.Module):
     def __init__(
@@ -103,7 +88,7 @@ class GroupLorentzFullyConnected(nn.Module):
         self.weight_space = Parameter(torch.Tensor(
             self.out_channels-1, self.in_channels-1, self.input_stabilizer_size, self.kernel_size[0] , self.kernel_size[1]), requires_grad=True)
         self.weight_time_output = Parameter(torch.Tensor(
-            1, self.in_channels-1, self.kernel_size[0] * self.kernel_size[1]), requires_grad=True)
+            1, self.input_stabilizer_size* (self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]+1), requires_grad=True)
         self.weight_time_input = Parameter(torch.Tensor(
             self.out_channels, 1), requires_grad=True)
         
@@ -142,35 +127,40 @@ class GroupLorentzFullyConnected(nn.Module):
         tw = combine_weight_kernel(tw_space, self.weight_time_output, self.weight_time_input, self.device)
       
         # print(f"tw_space requires grad: {tw.requires_grad}")
+        # print("tw shape", tw.shape)
 
         x = F.linear(x, tw, bias=None)
         # [batch_size, num_patches, out_features]
         # torch.Size([128, 256, 65])
 
-        if self.bias is not None:
-            group_map = torch.arange(1,self.out_channels ).repeat_interleave(self.output_stabilizer_size).to(x.device)
-            group_map = torch.cat([torch.tensor([0], device=x.device), group_map])
-            bias = self.bias[group_map].view(1,  1, -1)  
-            x = x + bias
+        # if self.bias is not None:
+        #     group_map = torch.arange(1,self.out_channels ).repeat_interleave(self.output_stabilizer_size).to(x.device)
+        #     group_map = torch.cat([torch.tensor([0], device=x.device), group_map])
+        #     bias = self.bias[group_map].view(1,  1, -1)  
+        #     x = x + bias
 
         # Extract the Spatial Components
+        # print(x.size())
+        batch_size, num_patches, out_c = x.size()
+        # print("x 1", x.shape)
+
+        normalized_x = self.normalize_time(x)
+
+        return normalized_x    # shape: [B, G, n, F]
+    
+    def normalize_time(self, x):
         x_space = x.narrow(-1, 1, x.shape[-1] - 1).to(self.device)
         x_time = x.narrow(-1, 0, 1).to(self.device)
-        indices = torch.arange(0, x_space.size()[-1], step=self.output_stabilizer_size).to(self.device)
-        x_space_original = torch.index_select(x_space, dim=-1, index=indices)
-        
-        x_original = torch.cat([x_time, x_space_original], dim=-1)
-
+ 
         if self.normalize:
-            x_time = self.extract_time(x_original, x_space_original)
+            x_time = self.extract_time(x, x_space)
             #  the time component (x_time) and the spatial components (x_space) are concatenated along the last dimension to form the final output tensor x.
         else:
-            x_time = self.manifold.get_time(x_space_original)
+            x_time = self.manifold.get_time(x_space)
         
         x = torch.cat([x_time.to(self.device), x_space.to(self.device)], dim=-1)
 
         return x
-
     def extract_time(self, x, x_space):
         #  normalization of the spatial components is applied:
         scale = x.narrow(-1, 0, 1).sigmoid() * self.scale.exp()
@@ -218,24 +208,21 @@ class GroupLorentzLinear(nn.Module):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.manifold = manifold
         # assume here is the in_channel with time dimension
-        self.in_channels = in_channels 
+        self.in_channels = in_channels
         self.out_channels = out_features
         self.bias = bias
         self.normalize = normalize
         self.input_stabilizer_size = input_stabilizer_size
 
-        self.lin_features = in_channels*self.input_stabilizer_size + 1
+        self.lin_features = (in_channels) * self.input_stabilizer_size
         
-        self.weight_space = Parameter(torch.Tensor(
-            self.out_channels-1, self.lin_features), requires_grad=True)
+        self.weight = Parameter(torch.Tensor(
+            self.out_channels, self.lin_features), requires_grad=True)
  
         
-        self.weight_time_output = Parameter(torch.Tensor(
-            1, self.in_channels+1), requires_grad=True)
-        
         if self.bias:
-            self.bias_space = nn.Parameter(torch.Tensor(self.out_channels-1), requires_grad=True)
-            self.bias_time_output = nn.Parameter(torch.Tensor(1), requires_grad=True)
+            self.bias = nn.Parameter(torch.Tensor(self.out_channels), requires_grad=True)
+     
 
         self.init_std = 0.02
         self.reset_parameters()
@@ -248,24 +235,17 @@ class GroupLorentzLinear(nn.Module):
             
     def reset_parameters(self):
         # Initialize weight_space with a uniform distribution
-        nn.init.uniform_(self.weight_space, -self.init_std, self.init_std)
+        nn.init.uniform_(self.weight, -self.init_std, self.init_std)
         # Initialize weight_time_input with a uniform distribution
-        nn.init.uniform_(self.weight_time_output, -self.init_std, self.init_std)
-
+  
         # Initialize bias if it's present
         if self.bias:
-            nn.init.constant_(self.bias_space, 0)
-            nn.init.constant_(self.bias_time_output, 0)
+            nn.init.constant_(self.bias, 0)
 
     def forward(self, x):
         # x =[batch_size, num_patches, space channels + time channels (1)]
-        # torch.Size([128, 256, 10])
 
-        tw = combine_weight_linear(self.weight_space, self.weight_time_output, self.input_stabilizer_size,self.device)
-        # print(f"tw_space requires grad: {tw.requires_grad}")
-        # final x torch.Size([128, 513])
-        # final weight torch.Size([512, 4097])
-        x = F.linear(x, tw)
+        x = F.linear(x, self.weight)
 
         # Extract the Spatial Components
         x_space = x.narrow(-1, 1, x.shape[-1] - 1)

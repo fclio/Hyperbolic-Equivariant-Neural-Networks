@@ -22,7 +22,6 @@ def trans_filter(w, inds):
  
     return w_transformed.contiguous()
 
-
 def combine_weight_kernel(tw_space, w_time_output, w_time_input, device):
 
     out_channels, output_stabilizer_size, in_channels, input_stabilizer_size,  kernel_size, kernel_size = tw_space.size()
@@ -42,27 +41,23 @@ def combine_weight_kernel(tw_space, w_time_output, w_time_input, device):
 
 
     time_output_repeated = w_time_output.detach().repeat(output_stabilizer_size, 1, 1, 1)
-
-    # for i in range(output_stabilizer_size):
-    #     time_output_repeated[i] = time_output_repeated[i].roll(i, dims=1)  # Example reorder logic
+    for i in range(output_stabilizer_size):
+        time_output_repeated[i] = time_output_repeated[i].roll(i, dims=1)  # Example reorder logic
 
     # Concatenate along dim=1 (channel dimension)
     tw_space = torch.cat([time_output_repeated.to(device), tw_space.to(device)], dim=1)
 
-    # # Expand and repeat over output_stabilizer dimension
-    time_input_expanded = w_time_input.unsqueeze(0).repeat(
-        output_stabilizer_size, 1, 1, 1  # shape: (output_stabilizer_size, out_channels, input_stabilizer_size, 1)
-    )
-
-    # for i in range(output_stabilizer_size):
-    #     time_input_expanded[i] = time_input_expanded[i].roll(i, dims=1)  # Example reorder logic
-
-    tw_space = torch.cat([time_input_expanded.to(device), tw_space.to(device)], dim=-1)
-
     output_stabilizer_size, out_channels, input_stabilizer_size, rest = tw_space.size()
-    tw_shape = (output_stabilizer_size * out_channels,
+    tw_shape = (output_stabilizer_size, out_channels,
                     input_stabilizer_size * rest)
-    tw = tw_space.reshape(tw_shape)
+    tw_space = tw_space.reshape(tw_shape)
+
+    time_input_expanded = w_time_input.unsqueeze(0).repeat(
+    output_stabilizer_size,  1, 1  )
+
+    tw = torch.cat([ time_input_expanded.to(device), tw_space.to(device)], dim=-1)
+
+    tw = tw.view(output_stabilizer_size * out_channels, tw.shape[2])
 
     return tw.contiguous()
 
@@ -102,7 +97,7 @@ class GroupLorentzFullyConnected(nn.Module):
         self.weight_time_output = Parameter(torch.Tensor(
             1, 1, self.input_stabilizer_size, (self.in_channels - 1) * self.kernel_size[0] * self.kernel_size[1]), requires_grad=True)
         self.weight_time_input = Parameter(torch.Tensor(
-            self.out_channels, self.input_stabilizer_size, 1), requires_grad=True)
+            self.out_channels, 1), requires_grad=True)
         
         if bias:
             self.bias = nn.Parameter(torch.Tensor(self.out_channels), requires_grad=True)
@@ -239,7 +234,7 @@ class GroupLorentzLinear(nn.Module):
         self.normalize = normalize
         self.input_stabilizer_size = input_stabilizer_size
 
-        self.lin_features = (in_channels) * self.input_stabilizer_size
+        self.lin_features = (in_channels-1) * self.input_stabilizer_size +1
         
         self.weight = Parameter(torch.Tensor(
             self.out_channels, self.lin_features), requires_grad=True)

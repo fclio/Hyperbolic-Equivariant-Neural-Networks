@@ -1,6 +1,7 @@
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+from datasets import load_dataset
 
 from lib.geoopt import ManifoldParameter
 from lib.geoopt.optim import RiemannianAdam, RiemannianSGD
@@ -10,6 +11,24 @@ from classification.models.classifier_resnet import ResNetClassifier
 
 from classification.models.classifier_cnn import CNNClassifier
 
+
+
+# Define a custom dataset class to apply transformations
+class CIFAR100LT(torch.utils.data.Dataset):
+    def __init__(self, hf_dataset, transform=None):
+        self.dataset = hf_dataset
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        image = item['img']
+        label = item['fine_label']
+        if self.transform:
+            image = self.transform(image)
+        return image, label
 
 
 
@@ -91,7 +110,7 @@ def select_model(img_dim, num_classes, args):
             enc_args['k'] = args.encoder_k
         elif args.encoder_manifold=="equivariant":
             enc_args["eq_type"] = args.equivariant_type
-            
+
         elif args.encoder_manifold=="lorentz_equivariant":
             enc_args['learn_k'] = args.learn_k
             enc_args['k'] = args.encoder_k
@@ -136,7 +155,7 @@ def select_optimizer(model, args):
         lr_scheduler = MultiStepLR(
             optimizer, milestones=args.lr_scheduler_milestones, gamma=args.lr_scheduler_gamma
         )
-        
+
 
     return optimizer, lr_scheduler
 
@@ -171,7 +190,7 @@ def get_param_groups(model, lr_manifold, weight_decay_manifold):
                 for n, p in model.named_parameters()
                 if p.requires_grad
                 and any(nd in n for nd in k_params)
-            ], 
+            ],
             "weight_decay": 0,
             "lr": 1e-4
         }
@@ -183,7 +202,7 @@ def select_dataset(args, validation_split=False):
     """ Selects an available dataset and returns PyTorch dataloaders for training, validation and testing. """
 
     if args.dataset == 'MNIST':
-        
+
         train_transform=transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize((32,32), antialias=None)
@@ -203,13 +222,13 @@ def select_dataset(args, validation_split=False):
         num_classes = 10
 
     elif args.dataset == 'MNIST_rotation':
-        
+
         train_transform=transforms.Compose([
             transforms.RandomRotation(360),
             transforms.ToTensor(),
             transforms.Resize((32,32), antialias=None)
         ])
-        
+
         test_transform=transforms.Compose([
             transforms.RandomRotation(360),
             transforms.ToTensor(),
@@ -223,14 +242,14 @@ def select_dataset(args, validation_split=False):
 
         img_dim = [1, 32, 32]
         num_classes = 10
-        
+
     elif args.dataset == 'MNIST_rot':
-        
+
         train_transform=transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize((32,32), antialias=None)
         ])
-        
+
         test_transform=transforms.Compose([
             transforms.RandomRotation(360),
             transforms.ToTensor(),
@@ -265,7 +284,7 @@ def select_dataset(args, validation_split=False):
 
         img_dim = [3, 32, 32]
         num_classes = 10
-        
+
     elif args.dataset == 'CIFAR-10_rot':
         train_transform=transforms.Compose([
             transforms.RandomCrop(32, padding=4),
@@ -307,7 +326,7 @@ def select_dataset(args, validation_split=False):
 
         img_dim = [3, 32, 32]
         num_classes = 100
-        
+
     elif args.dataset == 'CIFAR-100_rot':
         train_transform=transforms.Compose([
             transforms.RandomCrop(32, padding=4),
@@ -354,32 +373,62 @@ def select_dataset(args, validation_split=False):
         img_dim = [3, 64, 64]
         num_classes = 200
 
+    elif args.dataset == 'cifar100-lt':
+
+        # Define your transformations
+        train_transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        # Load the dataset with the desired imbalance factor
+        # Options for config_name: 'r-10' (imbalance factor 10), 'r-100' (imbalance factor 100)
+        dataset = load_dataset("tomas-gajarsky/cifar100-lt", name="r-100",trust_remote_code=True)
+
+        # Create training and test datasets
+        train_set = CIFAR100LT(dataset['train'], transform=train_transform)
+        test_set = CIFAR100LT(dataset['test'], transform=test_transform)
+
+        # Optionally, create a validation split
+        if validation_split:
+            train_set, val_set = torch.utils.data.random_split(train_set, [40000, len(train_set) - 40000], generator=torch.Generator().manual_seed(1))
+
+        img_dim = [3, 32, 32]
+        num_classes = 100
+
     else:
         raise "Selected dataset '{}' not available.".format(args.dataset)
-    
+
     # Dataloader
-    train_loader = DataLoader(train_set, 
-        batch_size=args.batch_size, 
-        num_workers=8, 
-        pin_memory=True, 
+    train_loader = DataLoader(train_set,
+        batch_size=args.batch_size,
+        num_workers=8,
+        pin_memory=True,
         shuffle=True
     )
-    
-    test_loader = DataLoader(test_set, 
-        batch_size=args.batch_size_test, 
-        num_workers=8, 
-        pin_memory=True, 
+
+    test_loader = DataLoader(test_set,
+        batch_size=args.batch_size_test,
+        num_workers=8,
+        pin_memory=True,
         shuffle=False
-    ) 
-    
+    )
+
     if validation_split:
-        val_loader = DataLoader(val_set, 
-            batch_size=args.batch_size_test, 
-            num_workers=8, 
-            pin_memory=True, 
+        val_loader = DataLoader(val_set,
+            batch_size=args.batch_size_test,
+            num_workers=8,
+            pin_memory=True,
             shuffle=False
         )
     else:
         val_loader = test_loader
-        
+
     return train_loader, test_loader, val_loader, img_dim, num_classes
