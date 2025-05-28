@@ -109,13 +109,32 @@ def getArguments():
 
 
 
-
     args = parser.parse_args()
 
     return args
 
 
 
+def append_epoch_results(epoch, train_loss, train_acc1, val_loss, val_acc1, output_dir):
+    results_path = os.path.join(output_dir, "epoch_results.json")
+    new_entry = {
+        "epoch": epoch,
+        "train_loss": train_loss,
+        "train_acc1": train_acc1,
+        "val_loss": val_loss,
+        "val_acc1": val_acc1
+    }
+
+    # Append if file exists, else create
+    if os.path.exists(results_path):
+        with open(results_path, "r") as f:
+            data = json.load(f)
+    else:
+        data = []
+
+    data.append(new_entry)
+    with open(results_path, "w") as f:
+        json.dump(data, f, indent=4)
 
 
 def plot_loss_curve(train_losses, val_losses, output_dir):
@@ -252,6 +271,8 @@ def main(args):
 
             train_losses.append(losses.avg)  # Store average loss for this epoch
             val_losses.append(loss_val)  # Store average loss for this epoch
+            append_epoch_results(epoch + 1, losses.avg, acc1.avg, loss_val, acc1_val, output_dir)
+
 
             # Testing for best model
             if acc1_val > best_acc:
