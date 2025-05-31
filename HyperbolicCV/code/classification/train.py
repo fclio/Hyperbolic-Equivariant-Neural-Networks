@@ -104,7 +104,7 @@ def getArguments():
 
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
-                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt"],
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt"],
                         help="Select a dataset.")
 
 
@@ -191,7 +191,7 @@ def main(args):
             os.makedirs(output_dir, exist_ok=True)
 
     print("Loading dataset...")
-    train_loader, val_loader, test_loader, img_dim, num_classes = select_dataset(args)
+    train_loader, test_loader, val_loader, img_dim, num_classes = select_dataset(args)
 
     print("Creating model...")
     model = select_model(img_dim, num_classes, args)
@@ -308,10 +308,28 @@ def main(args):
         print("Model not saved.")
 
     print("Testing final model...")
-    loss_test, acc1_test, acc5_test = evaluate(model, test_loader, criterion, device)
 
-    print("Results: Loss={:.4f}, Acc@1={:.4f}, Acc@5={:.4f}".format(
-        loss_test, acc1_test, acc5_test))
+    loss_test, acc1_test, acc5_test = evaluate(model, test_loader, criterion, device)
+    loss_val, acc1_val, acc5_val = evaluate(model, val_loader, criterion, device)
+
+    test_results = {
+        'loss_val': loss_val,
+        'acc1_val': acc1_val,
+        'acc5_val': acc5_val,
+        'loss_test': loss_test,
+        'acc1_test': acc1_test,
+        'acc5_test': acc5_test
+    }
+    print(
+        f"Validation Results:\n"
+        f"  Loss    = {loss_val:.4f}\n"
+        f"  Acc@1   = {acc1_val:.4f}\n"
+        f"  Acc@5   = {acc5_val:.4f}\n"
+        f"Test (random rotation) Results:\n"
+        f"  Loss    = {loss_test:.4f}\n"
+        f"  Acc@1   = {acc1_test:.4f}\n"
+        f"  Acc@5   = {acc5_test:.4f}"
+    )
 
     print("Testing best model...")
     if args.output_dir is not None:
@@ -319,15 +337,6 @@ def main(args):
         save_path = output_dir + "/final_model.pth"
         checkpoint = torch.load(save_path, map_location=device)
         model.module.load_state_dict(checkpoint['model'], strict=True)
-
-        loss_test, acc1_test, acc5_test = evaluate(model, test_loader, criterion, device)
-
-        test_results = {
-            'loss_test': loss_test,
-            'acc1_test': acc1_test,
-            'acc5_test': acc5_test
-        }
-        print(f"Final Model Results: Loss={loss_test:.4f}, Acc@1={acc1_test:.4f}, Acc@5={acc5_test:.4f}")
 
         # Save test results to JSON
         if args.output_dir:

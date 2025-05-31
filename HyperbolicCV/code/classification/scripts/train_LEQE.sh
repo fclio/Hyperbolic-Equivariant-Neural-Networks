@@ -19,5 +19,7 @@ module load 2024
 
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
+python -m pip install xxhash datasets --user
+
 python classification/train.py -c classification/config/LEQE-CNN.txt \
-   --output_dir classification/output/v2 --device cuda:0 --dataset MNIST_rot --num_epochs 10 --equivariant_type P4
+   --output_dir classification/output/v2 --device cuda:0 --dataset cifar100-lt --num_epochs 10 --equivariant_type P4

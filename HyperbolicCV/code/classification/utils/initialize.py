@@ -11,25 +11,7 @@ from classification.models.classifier_resnet import ResNetClassifier
 
 from classification.models.classifier_cnn import CNNClassifier
 
-
-
-# Define a custom dataset class to apply transformations
-class CIFAR100LT(torch.utils.data.Dataset):
-    def __init__(self, hf_dataset, transform=None):
-        self.dataset = hf_dataset
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        item = self.dataset[idx]
-        image = item['img']
-        label = item['fine_label']
-        if self.transform:
-            image = self.transform(image)
-        return image, label
-
+from classification.utils.dataset import Dataset, CIFAR100LT, save_image, CIFAR10LT
 
 
 def load_checkpoint(model, optimizer, lr_scheduler, args):
@@ -198,7 +180,7 @@ def get_param_groups(model, lr_manifold, weight_decay_manifold):
 
     return parameters
 
-def select_dataset(args, validation_split=False):
+def select_dataset(args, validation_split=True):
     """ Selects an available dataset and returns PyTorch dataloaders for training, validation and testing. """
 
     if args.dataset == 'MNIST':
@@ -302,7 +284,7 @@ def select_dataset(args, validation_split=False):
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
         test_set = datasets.CIFAR10('data', train=False, download=True, transform=test_transform)
-
+        
         img_dim = [3, 32, 32]
         num_classes = 10
 
@@ -324,6 +306,7 @@ def select_dataset(args, validation_split=False):
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
         test_set = datasets.CIFAR100('data', train=False, download=True, transform=test_transform)
 
+     
         img_dim = [3, 32, 32]
         num_classes = 100
 
@@ -361,13 +344,19 @@ def select_dataset(args, validation_split=False):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        val_transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
         test_transform=transforms.Compose([
+            transforms.RandomRotation(360),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
         train_set = datasets.ImageFolder(train_dir, train_transform)
-        val_set = datasets.ImageFolder(val_dir, test_transform)
+        val_set = datasets.ImageFolder(val_dir, val_transform)
         test_set = datasets.ImageFolder(test_dir, test_transform)
 
         img_dim = [3, 64, 64]
@@ -378,6 +367,7 @@ def select_dataset(args, validation_split=False):
         # Define your transformations
         train_transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
@@ -390,7 +380,7 @@ def select_dataset(args, validation_split=False):
 
         # Load the dataset with the desired imbalance factor
         # Options for config_name: 'r-10' (imbalance factor 10), 'r-100' (imbalance factor 100)
-        dataset = load_dataset("tomas-gajarsky/cifar100-lt", name="r-100",trust_remote_code=True)
+        dataset = load_dataset("tomas-gajarsky/cifar100-lt", name="r-100")
 
         # Create training and test datasets
         train_set = CIFAR100LT(dataset['train'], transform=train_transform)
@@ -398,10 +388,90 @@ def select_dataset(args, validation_split=False):
 
         # Optionally, create a validation split
         if validation_split:
-            train_set, val_set = torch.utils.data.random_split(train_set, [40000, len(train_set) - 40000], generator=torch.Generator().manual_seed(1))
+            # train_set, val_set = torch.utils.data.random_split(train_set, [40000, len(train_set) - 40000], generator=torch.Generator().manual_seed(1))
+            val_set =  CIFAR100LT(dataset['test'], transform=train_transform)
+
+        
 
         img_dim = [3, 32, 32]
         num_classes = 100
+
+    elif args.dataset == 'cifar10-lt':
+
+        # Define your transformations
+        train_transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        dataset = load_dataset("tomas-gajarsky/cifar10-lt", name="r-10")
+
+        # Create training and test datasets
+        train_set = CIFAR10LT(dataset['train'], transform=train_transform)
+        test_set = CIFAR10LT(dataset['test'], transform=test_transform)
+
+        # Optionally, create a validation split
+        if validation_split:
+            # train_set, val_set = torch.utils.data.random_split(train_set, [40000, len(train_set) - 40000], generator=torch.Generator().manual_seed(1))
+            val_set =  CIFAR10LT(dataset['test'], transform=train_transform)
+        img_dim = [3, 32, 32]
+        num_classes = 10
+
+    elif args.dataset == 'CUB-200':
+
+        img_dim = [3, 224, 224]
+        # img_dim = [3, 32, 32]
+        train_transform=transforms.Compose([
+            transforms.Resize(img_dim[1:]),
+            transforms.RandomCrop(img_dim[1], padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        val_transform=transforms.Compose([
+            transforms.Resize(img_dim[1:]),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+
+        test_transform=transforms.Compose([
+            transforms.Resize(img_dim[1:]),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
+        ])
+        dataset = load_dataset("Mobulan/CUB-200-2011")
+        # dataset = load_dataset("Donghyun99/CUB-200-2011")
+        # dataset = load_dataset("GATE-engine/cubirds200")
+        # train_set = Dataset(dataset['train'], transform=train_transform)
+        # test_set = Dataset(dataset['test'], transform=test_transform)
+        # train_set = CUB200Dataset(dataset['test'], transform=test_transform)
+        
+        # Split raw HuggingFace dataset first
+        full_train_data = dataset['train']
+        train_size = int(0.9 * len(full_train_data))
+        val_size = len(full_train_data) - train_size
+        train_data, val_data = full_train_data.train_test_split(test_size=val_size, seed=42).values()
+
+        # Now apply transforms separately
+        train_set = Dataset(train_data, transform=train_transform)
+        test_set = Dataset(val_data, transform=test_transform)
+        
+        if validation_split:
+            # val_set = Dataset(dataset['validation'], transform=val_transform)
+            val_set = Dataset(val_data, transform=val_transform)
+        save_image(train_set[0][0],args.output_dir)
+    
+        num_classes = 200
 
     else:
         raise "Selected dataset '{}' not available.".format(args.dataset)
@@ -431,4 +501,12 @@ def select_dataset(args, validation_split=False):
     else:
         val_loader = test_loader
 
+    print("train size", len(train_set))
+    print("val size", len(val_set))
+    print("test size", len(test_set))
+    print("image 1 train:", type(train_set[0][0]))
+    print("image 1 test:", type(test_set[0][0]))
+    print("image 1 train:", train_set[0][0].shape)
+    print("image 1 test:", test_set[0][0].shape)
+    # dede
     return train_loader, test_loader, val_loader, img_dim, num_classes

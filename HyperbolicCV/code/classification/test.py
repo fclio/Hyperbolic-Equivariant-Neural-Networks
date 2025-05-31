@@ -93,11 +93,13 @@ def getArguments():
                         help = "Clipping parameter for hybrid HNNs proposed by Guo et al. (2022)")
     
     # Dataset settings
-    parser.add_argument('--dataset', default='CIFAR-100', type=str, choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot"], 
-                        help = "Select a dataset.")
-
-    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5"],
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v7","v8"],
                     help="experiment_version")
+
+    # Dataset settings
+    parser.add_argument('--dataset', default='CIFAR-100', type=str,
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200"],
+                        help="Select a dataset.")
 
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                 help="Select conv model encoder manifold.")
@@ -127,7 +129,7 @@ def main(args):
     print(args)
 
     print("Loading dataset...")
-    train_loader, _, test_loader, img_dim, num_classes = select_dataset(args, validation_split=False)
+    train_loader, val_loader, test_loader, img_dim, num_classes = select_dataset(args, validation_split=True)
 
     print("Creating model...")
     model = select_model(img_dim, num_classes, args)
@@ -150,12 +152,27 @@ def main(args):
         print("Testing accuracy of model...")
         criterion = torch.nn.CrossEntropyLoss()
         loss_test, acc1_test, acc5_test = evaluate(model, test_loader, criterion, device)
-        print("Results: Loss={:.4f}, Acc@1={:.4f}, Acc@5={:.4f}".format(
-            loss_test, acc1_test, acc5_test))
+        loss_val, acc1_val, acc5_val = evaluate(model, val_loader, criterion, device)
+
+        print(
+            f"Validation Results:\n"
+            f"  Loss    = {loss_val:.4f}\n"
+            f"  Acc@1   = {acc1_val:.4f}\n"
+            f"  Acc@5   = {acc5_val:.4f}\n"
+            f"Test Results:\n"
+            f"  Loss    = {loss_test:.4f}\n"
+            f"  Acc@1   = {acc1_test:.4f}\n"
+            f"  Acc@5   = {acc5_test:.4f}"
+        )
+
+
         results["test_accuracy"] = {
-            "loss": loss_test,
-            "acc@1": acc1_test,
-            "acc@5": acc5_test
+            'loss_val': loss_val,
+            'acc1_val': acc1_val,
+            'acc5_val': acc5_val,
+            'loss_test': loss_test,
+            'acc1_test': acc1_test,
+            'acc5_test': acc5_test
         }
     
         

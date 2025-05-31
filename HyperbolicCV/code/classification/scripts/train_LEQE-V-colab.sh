@@ -14,10 +14,10 @@
 # module load PyTorch/2.1.2-foss-2023a-CUDA-12.1.1
 # seem have no use
 
-pip install -r requirements.txt
+# pip install -r requirements.txt
 # seem like without requirement.txt still runable
 
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-python classification/train.py -c classification/config/LEQE-CNN-6_1.txt \
+python3 classification/train.py -c classification/config/LEQE-CNN-6_1.txt \
    --output_dir classification/output --device cuda:0 --dataset MNIST_rot --num_epochs 10 --equivariant_type P4
