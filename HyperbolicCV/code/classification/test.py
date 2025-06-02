@@ -3,6 +3,8 @@
 import os
 import sys
 
+import pandas as pd
+
 working_dir = os.path.join(os.path.realpath(os.path.dirname(__file__)), "../")
 os.chdir(working_dir)
 
@@ -28,6 +30,10 @@ from train import evaluate
 from lib.utils.equivariant_test.test_equivariant import *
 from lib.utils.utils import AverageMeter, accuracy
 
+import torch
+
+from openood.evaluation_api import Evaluator
+
 def getArguments():
     """ Parses command-line options. """
     parser = configargparse.ArgumentParser(description='Image classification training', add_help=True)
@@ -43,7 +49,8 @@ def getArguments():
                             "visualize_embeddings",
                             "fgsm",
                             "pgd",
-                            "test_equivairant"
+                            "test_equivairant",
+                            "test_openood"
                         ],
                         help = "Select the testing mode.")
     
@@ -141,6 +148,7 @@ def main(args):
 
     if args.load_checkpoint is not None:
         print("Loading model checkpoint from {}".format(args.load_checkpoint))
+
         model = load_model_checkpoint(model, args.load_checkpoint)
     else:
         print("No model checkpoint given. Using random weights.")
@@ -175,7 +183,38 @@ def main(args):
             'acc5_test': acc5_test
         }
     
+    elif args.mode=="test_openood":
+
+        # id_name = process_id_name(args.dataset)
+        evaluator = Evaluator(
+            model,
+            id_name='cifar10',                     # the target ID dataset
+            data_root='./data',                    # change if necessary
+            config_root=None,                      # see notes above
+            preprocessor=None,                     # default preprocessing for the target ID dataset
+            postprocessor_name="msp", # the postprocessor to use
+            postprocessor=None,                    # if you want to use your own postprocessor
+            batch_size=200,                        # for certain methods the results can be slightly affected by batch size
+            shuffle=False,
+            num_workers=2)                         # could use more num_workers outside colab
         
+        metrics = evaluator.eval_ood(fsood=False)
+        # output_path = os.path.join(args.output_dir, f"{args.exp_name}{args.exp_v}-epoch:{args.num_epochs}_test_{args.dataset}.json")
+        # print(metrics)
+        # save_results_as_json(metrics, output_path)
+     
+        results["openood"] = metrics['ood'].to_dict(orient='index')
+
+        # ood_df = pd.DataFrame.from_dict(metrics['ood'], orient='index')
+        # ood_df.to_csv('ood_metrics.csv', index_label='Dataset')
+
+        print('Components within evaluator.metrics:\t', evaluator.metrics.keys())
+        print('Components within evaluator.scores:\t', evaluator.scores.keys())
+        print('')
+        print('The predicted ID class of the first 5 samples of CIFAR-100:\t', evaluator.scores['ood']['near']['cifar100'][0][:5])
+        print('The OOD score of the first 5 samples of CIFAR-100:\t', evaluator.scores['ood']['near']['cifar100'][1][:5])
+    
+    
     elif args.mode=="visualize_embeddings":
         print("Visualizing embedding space of model...")
         if args.output_dir is not None:

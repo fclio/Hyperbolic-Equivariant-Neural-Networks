@@ -57,6 +57,21 @@ class CIFAR10LT(torch.utils.data.Dataset):
         return image, label
 
 
+class TransformedSubset(torch.utils.data.Dataset):
+    def __init__(self, dataset, indices, transform):
+        self.dataset = dataset
+        self.indices = indices
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        actual_idx = self.indices[idx]
+        img, label = self.dataset[actual_idx]
+        if self.transform:
+            img = self.transform(img)
+        return img, label
 import torch
 import numpy as np
 from PIL import Image

@@ -99,12 +99,12 @@ def getArguments():
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                     help="Select conv model encoder manifold.")
 
-    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v7","v8"],
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v2_2","v2_3","v7","v8"],
                     help="experiment_version")
 
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
-                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt"],
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt","Flower102","Food101","CelebA","iNaturalist", "LFWPeople","PCAM"],
                         help="Select a dataset.")
 
 
@@ -287,6 +287,19 @@ def main(args):
                         'epoch': epoch,
                         'args': args,
                     }, save_path)
+
+
+            # Testing for best model
+            if epoch in [1, 50, 70, 100, 150, 170]:
+                if args.output_dir is not None:
+                    save_path = output_dir + "/step_model.pth"
+                    torch.save({
+                        'model': model.module.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        'lr_scheduler': lr_scheduler.state_dict() if lr_scheduler is not None else None,
+                        'epoch': epoch,
+                        'args': args,
+                    }, save_path)
         # ------- End validation and logging -------
 
     print("-----------------\nTraining finished\n-----------------")
@@ -335,7 +348,13 @@ def main(args):
     if args.output_dir is not None:
         print("Loading best model...")
         save_path = output_dir + "/final_model.pth"
-        checkpoint = torch.load(save_path, map_location=device)
+
+     
+        if 'weights_only' in torch.load.__code__.co_varnames:
+            checkpoint = torch.load(save_path, map_location=device, weights_only=False)
+        else:
+            checkpoint = torch.load(save_path, map_location=device)
+
         model.module.load_state_dict(checkpoint['model'], strict=True)
 
         # Save test results to JSON

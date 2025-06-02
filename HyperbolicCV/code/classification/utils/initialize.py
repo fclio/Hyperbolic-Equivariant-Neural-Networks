@@ -11,7 +11,7 @@ from classification.models.classifier_resnet import ResNetClassifier
 
 from classification.models.classifier_cnn import CNNClassifier
 
-from classification.utils.dataset import Dataset, CIFAR100LT, save_image, CIFAR10LT
+from classification.utils.dataset import Dataset, CIFAR100LT, save_image, CIFAR10LT, TransformedSubset
 
 
 def load_checkpoint(model, optimizer, lr_scheduler, args):
@@ -38,9 +38,14 @@ def load_checkpoint(model, optimizer, lr_scheduler, args):
 
     return model, optimizer, lr_scheduler, epoch
 
-def load_model_checkpoint(model, checkpoint_path):
+def load_model_checkpoint(model, checkpoint_path, map_location='cpu'):
     """ Loads a checkpoint from file-system. """
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+
+    if 'weights_only' in torch.load.__code__.co_varnames:
+        checkpoint = torch.load(checkpoint_path, map_location=map_location, weights_only=False)
+    else:
+        checkpoint = torch.load(checkpoint_path, map_location=map_location)
+    # checkpoint = torch.load(checkpoint_path, map_location='cpu')
     model.load_state_dict(checkpoint['model'])
 
     return model
@@ -473,6 +478,216 @@ def select_dataset(args, validation_split=True):
     
         num_classes = 200
 
+    elif args.dataset == 'Flower102':
+
+        # Flower102 images are typically 224x224 (or larger)
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(224),   # crop and resize to 224x224
+            transforms.RandomHorizontalFlip(),    # augmentation
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],       # standard ImageNet mean/std (common for Flowers)
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        val_transform = transforms.Compose([
+            transforms.Resize(256),               # resize shorter side to 256
+            transforms.CenterCrop(224),           # crop center 224x224
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.Resize(256),               # resize shorter side to 256
+            transforms.CenterCrop(224),           # crop center 224x224
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        train_set = datasets.Flowers102(root='data', split='train', download=True, transform=train_transform)
+        val_set = datasets.Flowers102(root='data', split='val', download=True, transform=test_transform)
+        test_set = datasets.Flowers102(root='data', split='test', download=True, transform=test_transform)
+
+        img_dim = [3, 224, 224]
+        num_classes = 102
+
+    elif args.dataset == 'Food101':
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(224),      # Food101 images are larger, usually 224x224
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],          # Standard ImageNet normalization
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        val_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],          # Same normalization for test
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],          # Same normalization for test
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+
+        train_set = datasets.Food101(root='data', split='train', download=True, transform=train_transform)
+        val_set = datasets.Food101(root='data', split='test', download=True, transform=val_transform)
+        test_set = datasets.Food101(root='data', split='test', download=True, transform=test_transform)
+        
+        img_dim = [3, 224, 224]
+        num_classes = 101
+
+    elif args.dataset == 'CelebA':
+        train_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.5, 0.5, 0.5],       # CelebA images normalized between -1 and 1 roughly
+                std=[0.5, 0.5, 0.5]
+            ),
+        ])
+        val_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.5, 0.5, 0.5],
+                std=[0.5, 0.5, 0.5]
+            ),
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.5, 0.5, 0.5],
+                std=[0.5, 0.5, 0.5]
+            ),
+        ])
+
+        train_set = datasets.CelebA(root='data', split='valid', download=True, transform=train_transform)
+        val_set = datasets.CelebA(root='data', split='test', download=True, transform=val_transform)
+        test_set = datasets.CelebA(root='data', split='test', download=True, transform=test_transform)
+
+        img_dim = [3, 224, 224]
+        num_classes = 40   # CelebA has 40 attribute labels (not classic classes)
+
+    elif args.dataset == 'iNaturalist':
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],   # ImageNet stats (commonly used for iNaturalist too)
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        val_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+        test_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        full_dataset = datasets.INaturalist(
+            root='data',
+            version='2021_valid',
+            download=True,
+            transform=None,
+        )
+
+        # Decide split sizes
+        total_len = len(full_dataset)
+        train_len = int(0.8 * total_len)
+        val_len = total_len - train_len
+
+        # Random split indices
+        train_indices, val_indices = torch.utils.data.random_split(
+            list(range(total_len)), [train_len, val_len]
+        )
+
+        # Create train and val datasets with their respective transforms
+        train_set = TransformedSubset(full_dataset, train_indices, train_transform)
+        val_set = TransformedSubset(full_dataset, val_indices, val_transform)
+        test_set = TransformedSubset(full_dataset, val_indices, test_transform)
+
+        # Optional: DataLoaders
+        train_loader = DataLoader(train_set, batch_size=64, shuffle=True, num_workers=4)
+        val_loader = DataLoader(val_set, batch_size=64, shuffle=False, num_workers=4)
+        test_loader = DataLoader(test_set, batch_size=64, shuffle=False, num_workers=4)
+
+        print(len(full_dataset.all_categories))  # Number of classes
+
+        img_dim = [3, 224, 224]
+        num_classes = 10000  # iNaturalist 2019 has 1010 classes
+        
+    elif args.dataset == 'PCAM':
+            train_transform = transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
+                transforms.ToTensor(),
+            ])
+
+            test_transform = transforms.Compose([
+                transforms.ToTensor(),
+            ])
+
+            train_set = datasets.PCAM(root='data', split='train', transform=train_transform, download=True)
+            if validation_split:
+                # You can split 70k train -> 60k train / 10k val (or adapt sizes to your memory/quota)
+                train_set, val_set = torch.utils.data.random_split(
+                    train_set,
+                    [60000, len(train_set) - 60000],
+                    generator=torch.Generator().manual_seed(1)
+                )
+            else:
+                val_set = datasets.PCAM(root='data', split='val', transform=test_transform, download=True)
+
+            test_set = datasets.PCAM(root='data', split='test', transform=test_transform, download=True)
+
+            img_dim = [3, 96, 96]
+            num_classes = 2  # Binary classification: tumor vs non-tumor
+
     else:
         raise "Selected dataset '{}' not available.".format(args.dataset)
 
@@ -508,5 +723,5 @@ def select_dataset(args, validation_split=True):
     print("image 1 test:", type(test_set[0][0]))
     print("image 1 train:", train_set[0][0].shape)
     print("image 1 test:", test_set[0][0].shape)
-    # dede
+
     return train_loader, test_loader, val_loader, img_dim, num_classes
