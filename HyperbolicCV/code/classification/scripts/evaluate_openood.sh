@@ -17,7 +17,7 @@ module load Miniconda3/24.7.1-0
 conda init
 source ~/.bashrc
 
-conda activate py310   
+conda activate py310
 
 
 # pip install --upgrade pip
@@ -36,7 +36,28 @@ conda activate py310
 # pip install -r requirements.txt
 
 
-python classification/test.py -c classification/config/E-CNN.txt \
-   --mode test_openood --load_checkpoint classification/output/E-CNN_CIFAR-10_rot_epoch:200_P4/final_model.pth \
+# python classification/test.py -c classification/config/E-CNN.txt \
+#    --mode test_openood --load_checkpoint classification/output/E-CNN_CIFAR-100_rot_epoch:200_P4/final_model.pth \
+#    --dataset CIFAR-100 \
+#    --output_dir classification/output/E-CNN_CIFAR-100_rot_epoch:200_P4 \
+#    --equivariant_type P4
+
+# python classification/test.py -c classification/config/L-CNN.txt \
+#    --mode test_openood --load_checkpoint classification/output/L-CNN_CIFAR-100_rot_epoch:200_P4/final_model.pth \
+#    --dataset CIFAR-100 \
+#    --output_dir classification/output/L-CNN_CIFAR-100_rot_epoch:200_P4 \
+#    --equivariant_type P4
+
+# python classification/test.py -c classification/config/EQE-CNN.txt \
+#    --mode test_openood --load_checkpoint classification/output/EQE-CNN_CIFAR-100_rot_epoch:200_P4/final_model.pth \
+#    --dataset CIFAR-100 \
+#    --output_dir classification/output/EQE-CNN_CIFAR-100_rot_epoch:200_P4 \
+#    --equivariant_type P4
+
+
+
+python classification/test.py -c classification/config/LEQE-CNN-3_1.txt \
+   --mode test_openood --load_checkpoint classification/output/LEQE-CNN-3_1_CIFAR-10_rot_epoch:200_P4/final_model.pth \
    --dataset CIFAR-10 \
-   --output_dir classification/output/E-CNN_CIFAR-10_rot_epoch:200_P4
+   --output_dir classification/output/LEQE-CNN-3_1_CIFAR-10_rot_epoch:200_P4 \
+   --equivariant_type P4

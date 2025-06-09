@@ -99,12 +99,12 @@ def getArguments():
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                     help="Select conv model encoder manifold.")
 
-    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v2_2","v2_3","v7","v8"],
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v2_2","v2_3","v7","v8","v4_3_1","v4_3_2","v4_1_3_1","v4_1_3_2","v4_2_3_1","v4_2_3_2"],
                     help="experiment_version")
 
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
-                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt","Flower102","Food101","CelebA","iNaturalist", "LFWPeople","PCAM"],
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt","Flower102","Food101","CelebA","iNaturalist", "LFWPeople","PCAM", "SUN397", "PET","DTD"],
                         help="Select a dataset.")
 
 
@@ -112,6 +112,7 @@ def getArguments():
     args = parser.parse_args()
 
     return args
+
 
 
 
@@ -125,14 +126,19 @@ def append_epoch_results(epoch, train_loss, train_acc1, val_loss, val_acc1, outp
         "val_acc1": val_acc1
     }
 
-    # Append if file exists, else create
-    if os.path.exists(results_path):
+    # Safely read existing results
+    if os.path.exists(results_path) and os.path.getsize(results_path) > 0:
         with open(results_path, "r") as f:
-            data = json.load(f)
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                print(f"[Warning] JSON decode failed. Overwriting {results_path}")
+                data = []
     else:
         data = []
 
     data.append(new_entry)
+
     with open(results_path, "w") as f:
         json.dump(data, f, indent=4)
 
@@ -206,11 +212,19 @@ def main(args):
     criterion = torch.nn.CrossEntropyLoss()
 
     start_epoch = 0
+
+    
+
     if args.load_checkpoint is not None:
         print("Loading model checkpoint from {}".format(args.load_checkpoint))
-        model, optimizer, lr_scheduler, start_epoch = load_checkpoint(model, optimizer, lr_scheduler, args)
-
+        model, optimizer, lr_scheduler, start_epoch = load_checkpoint(model, optimizer, lr_scheduler, device, args)
+        model.eval()
+        with torch.no_grad():
+            loss_val, acc1_val, acc5_val = evaluate(model, val_loader, criterion, device)
+        print(f"Sanity check after loading: Val Acc@1 = {acc1_val}")
+        
     model = DataParallel(model, device_ids=args.device)
+    
 
     if args.compile:
         model = torch.compile(model)
@@ -290,7 +304,8 @@ def main(args):
 
 
             # Testing for best model
-            if epoch in [1, 50, 70, 100, 150, 170]:
+            if (epoch in [1, 25, 43, 50, 65, 70, 80,100, 135, 150,  165, 170,180, 190]) or args.dataset == "Food101" or args.dataset == "PCAM":
+                # dede
                 if args.output_dir is not None:
                     save_path = output_dir + "/step_model.pth"
                     torch.save({
@@ -349,7 +364,7 @@ def main(args):
         print("Loading best model...")
         save_path = output_dir + "/final_model.pth"
 
-     
+
         if 'weights_only' in torch.load.__code__.co_varnames:
             checkpoint = torch.load(save_path, map_location=device, weights_only=False)
         else:

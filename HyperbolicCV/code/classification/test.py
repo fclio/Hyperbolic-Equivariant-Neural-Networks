@@ -38,12 +38,12 @@ def getArguments():
     """ Parses command-line options. """
     parser = configargparse.ArgumentParser(description='Image classification training', add_help=True)
 
-    parser.add_argument('-c', '--config_file', required=False, default=None, is_config_file=True, type=str, 
+    parser.add_argument('-c', '--config_file', required=False, default=None, is_config_file=True, type=str,
                         help="Path to config file.")
     parser.add_argument('--exp_name', default="test", type=str,
                         help="Name of the experiment.")
     # Modes
-    parser.add_argument('--mode', default="test_accuracy", type=str, 
+    parser.add_argument('--mode', default="test_accuracy", type=str,
                         choices=[
                             "test_accuracy",
                             "visualize_embeddings",
@@ -53,52 +53,52 @@ def getArguments():
                             "test_openood"
                         ],
                         help = "Select the testing mode.")
-    
+
     # Output settings
-    parser.add_argument('--output_dir', default=None, type=str, 
+    parser.add_argument('--output_dir', default=None, type=str,
                         help = "Path for output files (relative to working directory).")
 
     # General settings
     parser.add_argument('--device', default="cuda:0", type=lambda s: [str(item) for item in s.replace(' ','').split(',')],
                         help="List of devices split by comma (e.g. cuda:0,cuda:1), can also be a single device or 'cpu')")
-    parser.add_argument('--dtype', default='float32', type=str, choices=["float32", "float64"], 
+    parser.add_argument('--dtype', default='float32', type=str, choices=["float32", "float64"],
                         help="Set floating point precision.")
-    parser.add_argument('--seed', default=1, type=int, 
+    parser.add_argument('--seed', default=1, type=int,
                         help="Set seed for deterministic training.")
-    parser.add_argument('--load_checkpoint', default=None, type=str, 
+    parser.add_argument('--load_checkpoint', default=None, type=str,
                         help = "Path to model checkpoint.")
 
     # Testing parameters
-    parser.add_argument('--batch_size', default=128, type=int, 
+    parser.add_argument('--batch_size', default=128, type=int,
                         help="Training batch size.")
-    parser.add_argument('--batch_size_test', default=128, type=int, 
+    parser.add_argument('--batch_size_test', default=128, type=int,
                         help="Testing batch size.")
     parser.add_argument('--num_epochs', default=200, type=int,
                         help="Number of training epochs.")
     # Model selection
-    parser.add_argument('--num_layers', default=18, type=int, choices=[18, 50], 
+    parser.add_argument('--num_layers', default=18, type=int, choices=[18, 50],
                         help = "Number of layers in ResNet.")
-    parser.add_argument('--embedding_dim', default=512, type=int, 
+    parser.add_argument('--embedding_dim', default=512, type=int,
                         help = "Dimensionality of classification embedding space (could be expanded by ResNet)")
-    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "lorentz_equivariant"], 
+    parser.add_argument('--encoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "lorentz_equivariant"],
                         help = "Select conv model encoder manifold.")
-    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "poincare","lorentz_equivariant"], 
+    parser.add_argument('--decoder_manifold', default='lorentz', type=str, choices=["equivariant","euclidean", "lorentz", "poincare","lorentz_equivariant"],
                         help = "Select conv model decoder manifold.")
-    
+
     parser.add_argument('--model_type', default='resnet', type=str,
                         choices=["resnet", "cnn"],
                         help="Select a model type.")
-    
+
     # Hyperbolic geometry settings
     parser.add_argument('--learn_k', action='store_true',
                         help="Set a learnable curvature of hyperbolic geometry.")
-    parser.add_argument('--encoder_k', default=1.0, type=float, 
+    parser.add_argument('--encoder_k', default=1.0, type=float,
                         help = "Initial curvature of hyperbolic geometry in backbone (geoopt.K=-1/K).")
-    parser.add_argument('--decoder_k', default=1.0, type=float, 
+    parser.add_argument('--decoder_k', default=1.0, type=float,
                         help = "Initial curvature of hyperbolic geometry in decoder (geoopt.K=-1/K).")
-    parser.add_argument('--clip_features', default=1.0, type=float, 
+    parser.add_argument('--clip_features', default=1.0, type=float,
                         help = "Clipping parameter for hybrid HNNs proposed by Guo et al. (2022)")
-    
+
     # Dataset settings
     parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v7","v8"],
                     help="experiment_version")
@@ -121,9 +121,9 @@ def save_results_as_json(results, output_path):
         json.dump(results, f, indent=4)
 
 def main(args):
-    
+
     if torch.cuda.is_available():
-        device = args.device[0] 
+        device = args.device[0]
         torch.cuda.set_device(device)
         torch.cuda.empty_cache()
         print(f"Using CUDA device: {device}")
@@ -182,13 +182,17 @@ def main(args):
             'acc1_test': acc1_test,
             'acc5_test': acc5_test
         }
-    
+
     elif args.mode=="test_openood":
+        if args.dataset ==  "CIFAR-100":
+            id_name = 'cifar100'
+        elif args.dataset ==  "CIFAR-10":
+            id_name = 'cifar10'
 
         # id_name = process_id_name(args.dataset)
         evaluator = Evaluator(
             model,
-            id_name='cifar10',                     # the target ID dataset
+            id_name=id_name,                     # the target ID dataset
             data_root='./data',                    # change if necessary
             config_root=None,                      # see notes above
             preprocessor=None,                     # default preprocessing for the target ID dataset
@@ -197,24 +201,25 @@ def main(args):
             batch_size=200,                        # for certain methods the results can be slightly affected by batch size
             shuffle=False,
             num_workers=2)                         # could use more num_workers outside colab
-        
+
         metrics = evaluator.eval_ood(fsood=False)
         # output_path = os.path.join(args.output_dir, f"{args.exp_name}{args.exp_v}-epoch:{args.num_epochs}_test_{args.dataset}.json")
         # print(metrics)
         # save_results_as_json(metrics, output_path)
-     
-        results["openood"] = metrics['ood'].to_dict(orient='index')
 
         # ood_df = pd.DataFrame.from_dict(metrics['ood'], orient='index')
         # ood_df.to_csv('ood_metrics.csv', index_label='Dataset')
+        output_path = os.path.join(args.output_dir, 'ood_metrics.csv')
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        metrics.to_csv(output_path)
 
         print('Components within evaluator.metrics:\t', evaluator.metrics.keys())
         print('Components within evaluator.scores:\t', evaluator.scores.keys())
         print('')
         print('The predicted ID class of the first 5 samples of CIFAR-100:\t', evaluator.scores['ood']['near']['cifar100'][0][:5])
         print('The OOD score of the first 5 samples of CIFAR-100:\t', evaluator.scores['ood']['near']['cifar100'][1][:5])
-    
-    
+
+
     elif args.mode=="visualize_embeddings":
         print("Visualizing embedding space of model...")
         if args.output_dir is not None:
@@ -243,7 +248,7 @@ def main(args):
         print("Finished!")
         output_path = os.path.join(args.output_dir, f"{args.exp_name}{args.exp_v}-epoch:{args.num_epochs}_test_{args.dataset}.json")
         save_results_as_json(results, output_path)
-    
+
 
 
 @torch.no_grad()
@@ -265,7 +270,7 @@ def adversarial_attack(attack, model, device, data_loader, epsilons=[0.8/255, 1.
             iters=7
         else:
             raise RuntimeError(f"Attack {attack} is not implemented.")
-        
+
         acc1, acc5 = run_attack(attack, model, device, data_loader, eps, iters)
         results[eps] = {"acc@1": acc1, "acc@5": acc5}
     return results
@@ -299,7 +304,7 @@ def run_attack(attack, model, device, data_loader, epsilon, iters=7):
                 perturbed_img = pgd_attack(x, x_in, epsilon)
             else:
                 raise RuntimeError(f"Attack {attack} is not implemented.")
-            
+
             output = model(perturbed_img)
             x = perturbed_img.detach()
 
@@ -313,7 +318,7 @@ def run_attack(attack, model, device, data_loader, epsilon, iters=7):
 def fgsm_attack(x, epsilon=0.3):
     sign_x_grad = x.grad.sign()
     perturbed_img = x + epsilon*sign_x_grad
-            
+
     return perturbed_img
 
 def pgd_attack(x, x_in, epsilon=0.3):
@@ -322,7 +327,7 @@ def pgd_attack(x, x_in, epsilon=0.3):
     x = x + alpha*sign_x_grad
     eta = torch.clamp(x - x_in, min=-epsilon, max=epsilon)
     perturbed_img = x_in + eta
-            
+
     return perturbed_img
 
 # ----------------------------------
@@ -335,7 +340,7 @@ if __name__ == '__main__':
         torch.set_default_dtype(torch.float32)
     else:
         raise "Wrong dtype in configuration -> " + args.dtype
-    
+
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)

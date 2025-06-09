@@ -57,25 +57,25 @@ class GroupLorentzReLU(nn.Module):
 
     def forward(self, x, add_time: bool=True):
 
-        bs, g, h, w, c = x.shape
+        # bs, g, h, w, c = x.shape
 
-        x = self.manifold.lorentz_flatten_group_dimension(x)
-        # print(x.shape)
+        # x = self.manifold.lorentz_flatten_group_dimension(x)
+        # # print(x.shape)
 
-        x = self.manifold.lorentz_relu(x) 
+        # x = self.manifold.lorentz_relu(x) 
 
-        x = self.manifold.lorentz_split_batch(x, self.input_stabilizer_size)
+        # x = self.manifold.lorentz_split_batch(x, self.input_stabilizer_size)
 
-        return x
+        # return x
     
         
         
-        # x = x.permute(1, 0, 2, 3, 4)
+        x = x.permute(1, 0, 2, 3, 4)
 
-        # list_x = [self.manifold.lorentz_relu(x_group) for x_group in x]
-        # x = torch.stack(list_x, dim=0) 
+        list_x = [self.manifold.lorentz_relu(x_group) for x_group in x]
+        x = torch.stack(list_x, dim=0) 
 
-        # x = x.permute(1, 0, 2, 3, 4)
-        # return x
+        x = x.permute(1, 0, 2, 3, 4)
+        return x
 
 

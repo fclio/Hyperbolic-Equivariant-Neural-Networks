@@ -2,7 +2,7 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from datasets import load_dataset
-
+from torch.utils.data import ConcatDataset
 from lib.geoopt import ManifoldParameter
 from lib.geoopt.optim import RiemannianAdam, RiemannianSGD
 from torch.optim.lr_scheduler import MultiStepLR
@@ -14,18 +14,22 @@ from classification.models.classifier_cnn import CNNClassifier
 from classification.utils.dataset import Dataset, CIFAR100LT, save_image, CIFAR10LT, TransformedSubset
 
 
-def load_checkpoint(model, optimizer, lr_scheduler, args):
+def load_checkpoint(model, optimizer, lr_scheduler, device, args):
     """ Loads a checkpoint from file-system. """
 
-    checkpoint = torch.load(args.load_checkpoint, map_location='cpu')
-
+    if 'weights_only' in torch.load.__code__.co_varnames:
+        checkpoint = torch.load(args.load_checkpoint, map_location=device, weights_only=False)
+    else:
+        checkpoint = torch.load(args.load_checkpoint, map_location=device)
+    
+    model = model.to(device)
     model.load_state_dict(checkpoint['model'])
 
     if 'optimizer' in checkpoint:
         if checkpoint['args'].optimizer == args.optimizer:
             optimizer.load_state_dict(checkpoint['optimizer'])
-            for group in optimizer.param_groups:
-                group['lr'] = args.lr
+            # for group in optimizer.param_groups:
+            #     group['lr'] = args.lr
 
             if (lr_scheduler is not None) and ('lr_scheduler' in checkpoint):
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -35,6 +39,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, args):
     epoch = 0
     if 'epoch' in checkpoint:
         epoch = checkpoint['epoch'] + 1
+    print(f"Resumed from epoch {epoch}")
 
     return model, optimizer, lr_scheduler, epoch
 
@@ -289,7 +294,7 @@ def select_dataset(args, validation_split=True):
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
         test_set = datasets.CIFAR10('data', train=False, download=True, transform=test_transform)
-        
+
         img_dim = [3, 32, 32]
         num_classes = 10
 
@@ -311,7 +316,7 @@ def select_dataset(args, validation_split=True):
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
         test_set = datasets.CIFAR100('data', train=False, download=True, transform=test_transform)
 
-     
+
         img_dim = [3, 32, 32]
         num_classes = 100
 
@@ -396,7 +401,7 @@ def select_dataset(args, validation_split=True):
             # train_set, val_set = torch.utils.data.random_split(train_set, [40000, len(train_set) - 40000], generator=torch.Generator().manual_seed(1))
             val_set =  CIFAR100LT(dataset['test'], transform=train_transform)
 
-        
+
 
         img_dim = [3, 32, 32]
         num_classes = 100
@@ -460,7 +465,7 @@ def select_dataset(args, validation_split=True):
         # train_set = Dataset(dataset['train'], transform=train_transform)
         # test_set = Dataset(dataset['test'], transform=test_transform)
         # train_set = CUB200Dataset(dataset['test'], transform=test_transform)
-        
+
         # Split raw HuggingFace dataset first
         full_train_data = dataset['train']
         train_size = int(0.9 * len(full_train_data))
@@ -470,12 +475,12 @@ def select_dataset(args, validation_split=True):
         # Now apply transforms separately
         train_set = Dataset(train_data, transform=train_transform)
         test_set = Dataset(val_data, transform=test_transform)
-        
+
         if validation_split:
             # val_set = Dataset(dataset['validation'], transform=val_transform)
             val_set = Dataset(val_data, transform=val_transform)
         save_image(train_set[0][0],args.output_dir)
-    
+
         num_classes = 200
 
     elif args.dataset == 'Flower102':
@@ -555,7 +560,7 @@ def select_dataset(args, validation_split=True):
         train_set = datasets.Food101(root='data', split='train', download=True, transform=train_transform)
         val_set = datasets.Food101(root='data', split='test', download=True, transform=val_transform)
         test_set = datasets.Food101(root='data', split='test', download=True, transform=test_transform)
-        
+
         img_dim = [3, 224, 224]
         num_classes = 101
 
@@ -651,16 +656,11 @@ def select_dataset(args, validation_split=True):
         val_set = TransformedSubset(full_dataset, val_indices, val_transform)
         test_set = TransformedSubset(full_dataset, val_indices, test_transform)
 
-        # Optional: DataLoaders
-        train_loader = DataLoader(train_set, batch_size=64, shuffle=True, num_workers=4)
-        val_loader = DataLoader(val_set, batch_size=64, shuffle=False, num_workers=4)
-        test_loader = DataLoader(test_set, batch_size=64, shuffle=False, num_workers=4)
-
         print(len(full_dataset.all_categories))  # Number of classes
 
         img_dim = [3, 224, 224]
         num_classes = 10000  # iNaturalist 2019 has 1010 classes
-        
+
     elif args.dataset == 'PCAM':
             train_transform = transforms.Compose([
                 transforms.RandomHorizontalFlip(),
@@ -668,25 +668,168 @@ def select_dataset(args, validation_split=True):
                 transforms.ToTensor(),
             ])
 
+            val_transform = transforms.Compose([
+                transforms.ToTensor(),
+            ])
             test_transform = transforms.Compose([
+                transforms.RandomRotation(360),
                 transforms.ToTensor(),
             ])
 
-            train_set = datasets.PCAM(root='data', split='train', transform=train_transform, download=True)
-            if validation_split:
-                # You can split 70k train -> 60k train / 10k val (or adapt sizes to your memory/quota)
-                train_set, val_set = torch.utils.data.random_split(
-                    train_set,
-                    [60000, len(train_set) - 60000],
-                    generator=torch.Generator().manual_seed(1)
-                )
-            else:
-                val_set = datasets.PCAM(root='data', split='val', transform=test_transform, download=True)
+            train_set = datasets.PCAM(root='/projects/prjs1590/data', split='train', transform=train_transform, download=True)
+            # if validation_split:
+            #     # You can split 70k train -> 60k train / 10k val (or adapt sizes to your memory/quota)
+            #     train_set, val_set = torch.utils.data.random_split(
+            #         train_set,
+            #         [60000, len(train_set) - 60000],
+            #         generator=torch.Generator().manual_seed(1)
+            #     )
+            # else:
 
-            test_set = datasets.PCAM(root='data', split='test', transform=test_transform, download=True)
+            val_set = datasets.PCAM(root='/projects/prjs1590/data', split='val', transform=val_transform, download=True)
+
+            test_set = datasets.PCAM(root='/projects/prjs1590/data', split='test', transform=test_transform, download=True)
 
             img_dim = [3, 96, 96]
             num_classes = 2  # Binary classification: tumor vs non-tumor
+    elif args.dataset == 'SUN397':
+
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+        val_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+        test_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+
+        # Load full dataset (download=True if not downloaded)
+        full_dataset = datasets.SUN397(root='/projects/prjs1590/data', transform=None, download=True)
+
+        # Decide split sizes
+        total_len = len(full_dataset)
+        train_len = int(0.8 * total_len)
+        val_len = total_len - train_len
+
+        # Random split indices
+        train_indices, val_indices = torch.utils.data.random_split(
+            list(range(total_len)), [train_len, val_len]
+        )
+
+        # Create train and val datasets with their respective transforms
+        train_set = TransformedSubset(full_dataset, train_indices, train_transform)
+        val_set = TransformedSubset(full_dataset, val_indices, val_transform)
+        test_set = TransformedSubset(full_dataset, val_indices, test_transform)
+
+        img_dim = [3, 224, 224]
+        num_classes = 397
+    elif args.dataset == 'PET':
+        train_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.RandomCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+        ])
+        val_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+        ])
+
+
+        test_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+        ])
+        data_dir = '/projects/prjs1590/data'
+
+        train_set = datasets.OxfordIIITPet(
+            root=data_dir, split='trainval', target_types='category',
+            transform=train_transform, download=True
+        )
+
+        test_set = datasets.OxfordIIITPet(
+            root=data_dir, split='test', target_types='category',
+            transform=test_transform, download=True
+        )
+
+        val_set = datasets.OxfordIIITPet(
+            root=data_dir, split='test', target_types='category',
+            transform=val_transform, download=True
+        )
+
+
+
+        img_dim = [3, 224, 224]
+        num_classes = 37
+    elif args.dataset == 'DTD':
+
+        train_transform = transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+        ])
+        
+        val_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),  # deterministic crop
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.RandomRotation(360),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+
+        data_dir = '/projects/prjs1590/data'
+        # Load DTD with 'train', 'val', and 'test' splits
+        train_set_2 = datasets.DTD(root=data_dir, split='train', transform=train_transform, download=True)
+        train_set_1 = datasets.DTD(root=data_dir, split='val', transform=test_transform, download=True)
+
+        train_set = ConcatDataset([train_set_1, train_set_2])
+
+        test_set = datasets.DTD(root=data_dir, split='test', transform=test_transform, download=True)
+        val_set = datasets.DTD(root=data_dir, split='test', transform=val_transform, download=True)
+        img_dim = [3, 224, 224]
+        num_classes = 47
 
     else:
         raise "Selected dataset '{}' not available.".format(args.dataset)

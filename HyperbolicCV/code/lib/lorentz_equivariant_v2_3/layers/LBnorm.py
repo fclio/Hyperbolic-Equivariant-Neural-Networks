@@ -14,7 +14,7 @@ class GroupLorentzBatchNorm(nn.Module):
     def __init__(self, manifold: CustomLorentz, num_features: int, input_stabilizer_size:int):
         super(GroupLorentzBatchNorm, self).__init__()
         self.manifold = manifold
-        # num_features = (num_features-1)*input_stabilizer_size+1
+        num_features = (num_features-1)*input_stabilizer_size+1
         
 
         self.beta = ManifoldParameter(self.manifold.origin(num_features), manifold=self.manifold)
@@ -92,37 +92,37 @@ class GroupLorentzBatchNorm2d(GroupLorentzBatchNorm):
     def forward(self, x, momentum=0.1):
         """ x has to be in channel last representation -> Shape = bs x H x W x C """
         bs, g, h, w, c = x.shape
-        # print("before:", x.shape)
+        print("before:", x.shape)
         
-        # x_group = self.manifold.lorentz_flatten_group_dimension(x)
+        x_group = self.manifold.lorentz_flatten_group_dimension(x)
   
-        # x_group = x_group.contiguous().view(bs, -1, g*(c-1)+1)  # Flatten groups into one batch
+        x_group = x_group.contiguous().view(bs, -1, g*(c-1)+1)  # Flatten groups into one batch
     
-        # x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
+        x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
         
-        # x = x_group.view(bs, h, w, g*(c-1)+1)
+        x = x_group.view(bs, h, w, g*(c-1)+1)
 
-        # # x = self.manifold.lorentz_split_batch(x, g)
-
-        # return x
-        print("after:", x.shape)
-
-        x = x.permute(1, 0, 2, 3, 4)
-
-        list_x = []
-        for x_group in x:
-            x_group = x_group.contiguous().view(bs, -1, c)  # Flatten groups into one batch
-          
-            x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
-            
-            x_group = x_group.view(bs, h, w, c)
-
-            list_x.append(x_group)
-        
-        x = torch.stack(list_x, dim=0) 
-        x = x.permute(1, 0, 2, 3, 4)
+        # x = self.manifold.lorentz_split_batch(x, g)
 
         return x
+        # print("after:", x.shape)
+
+        # x = x.permute(1, 0, 2, 3, 4)
+
+        # list_x = []
+        # for x_group in x:
+        #     x_group = x_group.contiguous().view(bs, -1, c)  # Flatten groups into one batch
+          
+        #     x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
+            
+        #     x_group = x_group.view(bs, h, w, c)
+
+        #     list_x.append(x_group)
+        
+        # x = torch.stack(list_x, dim=0) 
+        # x = x.permute(1, 0, 2, 3, 4)
+
+        # return x
     
     def test(self, x, momentum):
         with open("error.json", "r") as f:

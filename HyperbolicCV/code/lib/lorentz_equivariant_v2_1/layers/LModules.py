@@ -60,7 +60,7 @@ class GroupLorentzReLU(nn.Module):
         # bs, g, h, w, c = x.shape
 
         # x = self.manifold.lorentz_flatten_group_dimension(x)
-        # print(x.shape)
+ 
 
         x = self.manifold.lorentz_relu(x) 
 
