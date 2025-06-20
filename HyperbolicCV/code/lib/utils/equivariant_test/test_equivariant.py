@@ -20,11 +20,14 @@ from lib.lorentz.layers import (
     LorentzReLU,
     LorentzGlobalAvgPool2d
 )
-from lib.utils.equivariant_test.visualization import * 
+
+from lib.utils.equivariant_test.visualization import *
 from groupy.gconv.pytorch_gconv.pooling import global_max_pooling
 from groupy.gconv.pytorch_gconv import P4ConvZ2, P4ConvP4, P4MConvZ2, P4MConvP4M
 import torch.nn as nn
 import importlib
+
+
 
 class JSONLogger:
     def __init__(self, save_path):
@@ -50,18 +53,19 @@ import torchvision.transforms.functional as TF
 
 
 class EquivarianceTester:
-    def __init__(self, model, device, exp_v = "", model_type="", save_path="./equivariance_vis"):
+    def __init__(self, model, device, exp_v = "", model_type="", save_path="./equivariance_vis",eq_type="P4"):
         self.model = model
         self.device = device
         self.model_type = model_type
         self.exp_v = exp_v
         self._load_layers()
+        self.eq_type = eq_type
         self.save_path = save_path
         log_file=f"equivariance_log_{exp_v}.json"
         self.logger = JSONLogger(os.path.join(save_path, log_file))
         self.layer_types = (
-            nn.Conv2d, LorentzConv2d, self.LorentzP4MConvZ2, self.LorentzP4MConvP4M, P4ConvZ2, P4ConvP4,
-            P4MConvZ2, P4MConvP4M, nn.BatchNorm2d, nn.MaxPool2d, nn.AvgPool2d
+            nn.Conv2d, LorentzConv2d, self.LorentzP4ConvZ2, self.LorentzP4ConvP4, self.GroupLorentzReLU, self.GroupLorentzGlobalAvgPool2d, P4ConvZ2, P4ConvP4,
+            self.GroupLorentzBatchNorm, P4MConvZ2, P4MConvP4M, nn.BatchNorm2d, nn.MaxPool2d, nn.AvgPool2d
         )
         os.makedirs(self.save_path, exist_ok=True)
 
@@ -76,12 +80,19 @@ class EquivarianceTester:
         # Dynamically import LConv and LFC modules
         lconv_module = importlib.import_module(f'{base_path}.layers.LConv')
         lfc_module = importlib.import_module(f'{base_path}.layers.LFC')
+        LModules_module = importlib.import_module(f'{base_path}.layers.LModules')
+        LBnorm_module = importlib.import_module(f'{base_path}.layers.LBnorm')
 
         # Assign layer classes to instance attributes
         self.LorentzP4MConvZ2 = lconv_module.LorentzP4MConvZ2
         self.LorentzP4MConvP4M = lconv_module.LorentzP4MConvP4M
+        self.LorentzP4ConvZ2 = lconv_module.LorentzP4ConvZ2
+        self.LorentzP4ConvP4 = lconv_module.LorentzP4ConvP4
         self.GroupLorentzFullyConnected = lfc_module.GroupLorentzFullyConnected
         self.GroupLorentzLinear = lfc_module.GroupLorentzLinear
+        self.GroupLorentzBatchNorm= LBnorm_module.GroupLorentzBatchNorm
+        self.GroupLorentzGlobalAvgPool2d = LModules_module.GroupLorentzGlobalAvgPool2d
+        self.GroupLorentzReLU = LModules_module.GroupLorentzReLU
 
 
     def apply_transformation(self, tensor, angle=0, flip=None):
@@ -168,7 +179,9 @@ class EquivarianceTester:
             raise ValueError(f"Unsupported tensor shape: {tensor.shape}")
 
 
-    def test_equivariance_layer(self,layer_name, layer, data, visualize=True, save_path="./equivariance_vis", sample_idx=0, num_channels=3, logger=None,model_type=""):
+    def test_equivariance_layer(self,layer_name, layer, data, visualize=True, save_path="./equivariance_vis", sample_idx=0, num_channels=3, logger=None,model_type="",eq_type="P4"):
+        
+        print("type: ", self.model_type)
         layer.eval()
         data = data.to(self.device)
         if model_type == "LEQE-CNN" or model_type == "L-CNN" or model_type == "E-CNN":
@@ -191,9 +204,12 @@ class EquivarianceTester:
                 visalize_group_feature(data[0], save_path=save_path, name ="original",model_type=model_type)
 
 
-        rotations = [0, 90, 180, 270]
-
-        reflections = ['h', 'v']
+        if eq_type == "P4":
+            rotations = [0, 90, 180, 270]
+            reflections = []
+        else:
+            rotations = [0, 90, 180, 270]
+            reflections = ['h', 'v']
 
         all_outputs = []
         transformed_outputs = []
@@ -264,7 +280,7 @@ class EquivarianceTester:
         log(f"Mean Equivariance Error: {mean_error:.6f}")
 
         return mean_error
-    
+
 
     def test_model(self, dataloader):
         self.model.eval()
@@ -280,16 +296,20 @@ class EquivarianceTester:
 
         hooks = []
         for name, layer in self.model.named_modules():
+            
             if isinstance(layer, self.layer_types):
+                
                 hooks.append(layer.register_forward_hook(save_input_hook(name)))
-
+        
         with torch.no_grad():
             self.model(image)
 
         results = []
         for name, layer in self.model.named_modules():
+            
             if not isinstance(layer, self.layer_types):
                 continue
+
             input_tensor = inputs_by_layer.get(name)
             if input_tensor is None:
                 self.logger.log_entry(f"[!] Skipped layer {name} (no input captured)")
@@ -298,7 +318,8 @@ class EquivarianceTester:
             layer_path = os.path.join(self.save_path, name)
             os.makedirs(layer_path, exist_ok=True)
             self.logger.log_entry(f"Testing layer: {name}")
-            error = self.test_equivariance_layer(name, layer, input_tensor, visualize=True, save_path=layer_path,logger= self.logger, model_type=self.model_type)
+
+            error = self.test_equivariance_layer(name, layer, input_tensor, visualize=True, save_path=layer_path,logger= self.logger, model_type=self.model_type, eq_type=self.eq_type)
             self.logger.log_entry(f"  -> Error: {error:.6f}")
             results.append((name, error))
 

@@ -15,7 +15,7 @@ class GroupLorentzBatchNorm(nn.Module):
     def __init__(self, manifold: CustomLorentz, num_features: int, input_stabilizer_size:int):
         super(GroupLorentzBatchNorm, self).__init__()
         self.manifold = manifold
-        num_features = (num_features-1)*input_stabilizer_size+1
+        # num_features = (num_features-1)*input_stabilizer_size+1
         
 
         self.beta = ManifoldParameter(self.manifold.origin(num_features), manifold=self.manifold)
@@ -112,17 +112,15 @@ class GroupLorentzBatchNorm2d(GroupLorentzBatchNorm):
         # return x
 
         bs, g, h, w, c = x.shape
-    
-        
-        x_group = self.manifold.lorentz_flatten_group_dimension(x)
-  
-        x_group = x_group.contiguous().view(bs, -1, g*(c-1)+1)  # Flatten groups into one batch
-    
-        x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
-        
-        x = x_group.view(bs, h, w, g*(c-1)+1)
 
-        x = self.manifold.lorentz_split_batch(x, g)
+        # Flatten the group and spatial dims into one "point" axis
+        x_group = x.contiguous().view(bs, g * h * w, c)
+
+        # Apply Lorentz BatchNorm (centroid + normalization) over the "point" axis
+        x_group = super(GroupLorentzBatchNorm2d, self).forward(x_group, momentum)
+
+        # Reshape back to original shape
+        x = x_group.view(bs, g, h, w, c)
 
         return x
     

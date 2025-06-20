@@ -1,6 +1,6 @@
 # Output settings
-exp_name = LEQE-CNN-3_1
-exp_v = v3_1
+exp_name = LEQE-CNN-3_4
+exp_v = v3_4
 # output_dir = classification/output
 
 # General settings

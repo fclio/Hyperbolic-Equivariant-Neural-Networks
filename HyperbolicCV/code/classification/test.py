@@ -23,7 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from utils.initialize import select_dataset, select_model, load_model_checkpoint
+from utils.initialize import select_dataset, select_model, load_model_checkpoint, OpenOODCIFARPreprocessor
 from lib.utils.visualize import visualize_embeddings
 from train import evaluate
 
@@ -33,6 +33,10 @@ from lib.utils.utils import AverageMeter, accuracy
 import torch
 
 from openood.evaluation_api import Evaluator
+
+
+import torchvision.transforms as transforms
+
 
 def getArguments():
     """ Parses command-line options. """
@@ -100,16 +104,18 @@ def getArguments():
                         help = "Clipping parameter for hybrid HNNs proposed by Guo et al. (2022)")
 
     # Dataset settings
-    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v7","v8"],
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_4","v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v7","v8"],
                     help="experiment_version")
 
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
-                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200"],
+                        choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt","Flower102","Food101","CelebA","iNaturalist", "LFWPeople","PCAM", "SUN397", "PET","DTD"],
                         help="Select a dataset.")
-
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                 help="Select conv model encoder manifold.")
+    parser.add_argument('--cnn_size', default="", type=str,
+        choices=["small", "big", "normal"],
+        help="Select a dataset.")
     args, _ = parser.parse_known_args()
 
     return args
@@ -184,18 +190,18 @@ def main(args):
         }
 
     elif args.mode=="test_openood":
-        if args.dataset ==  "CIFAR-100":
+        if args.dataset ==  "CIFAR-100" or args.dataset ==  "CIFAR-100_rot"  :
             id_name = 'cifar100'
-        elif args.dataset ==  "CIFAR-10":
+        elif args.dataset ==  "CIFAR-10" or args.dataset ==  "CIFAR-10_rot"  :
             id_name = 'cifar10'
 
         # id_name = process_id_name(args.dataset)
         evaluator = Evaluator(
             model,
             id_name=id_name,                     # the target ID dataset
-            data_root='./data',                    # change if necessary
+            data_root='/projects/prjs1590/data',                    # change if necessary
             config_root=None,                      # see notes above
-            preprocessor=None,                     # default preprocessing for the target ID dataset
+            preprocessor=OpenOODCIFARPreprocessor(),                     # default preprocessing for the target ID dataset
             postprocessor_name="msp", # the postprocessor to use
             postprocessor=None,                    # if you want to use your own postprocessor
             batch_size=200,                        # for certain methods the results can be slightly affected by batch size
@@ -242,11 +248,12 @@ def main(args):
     if args.mode=="test_equivairant":
         path = join("equivariant_test",f"{args.exp_name}-epoch:{args.num_epochs}-{args.exp_v}")
         # test_equivariance(model, test_loader, device, path, args.exp_name )
-        tester = EquivarianceTester(model, device, exp_v=args.exp_v, save_path=path,model_type= args.exp_name)
+        print("start testing equivariant")
+        tester = EquivarianceTester(model, device, exp_v=args.exp_v, save_path=path,model_type= args.exp_name,eq_type=args.equivariant_type)
         tester.test_model(test_loader)
     else:
         print("Finished!")
-        output_path = os.path.join(args.output_dir, f"{args.exp_name}{args.exp_v}-epoch:{args.num_epochs}_test_{args.dataset}.json")
+        output_path = os.path.join(args.output_dir, f"test_{args.dataset}_{args.mode}.json")
         save_results_as_json(results, output_path)
 
 

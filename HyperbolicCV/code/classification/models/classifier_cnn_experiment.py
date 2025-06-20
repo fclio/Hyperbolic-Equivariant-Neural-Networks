@@ -8,16 +8,34 @@ from lib.geoopt.manifolds.stereographic import PoincareBall
 from lib.lorentz.layers import LorentzMLR
 from lib.poincare.layers import UnidirectionalPoincareMLR
 
+from lib.models import cnn_experiment as cnn_normal
+from lib.models import cnn_experiment_small as cnn_small
+from lib.models import cnn_experiment_big as cnn_big
 
-from lib.models.cnn_experiment import Lorentz_CNN, EUCLIDEAN_CNN, equivariant_CNN,  Lorentz_equivariant_CNN # Ensure this is correctly implemented
 
-# Define CNN model dictionary
-CNN_MODEL = {
-    "lorentz": Lorentz_CNN,  # Ensure LorentzCNN is defined correctly
-    "euclidean" : EUCLIDEAN_CNN,
-    "equivariant" : equivariant_CNN,
-    "lorentz_equivariant": Lorentz_equivariant_CNN,
-}
+def get_cnn_model_dict(cnn_size):
+    if cnn_size == "small":
+        return {
+            "lorentz": cnn_small.Lorentz_CNN,
+            "euclidean": cnn_small.EUCLIDEAN_CNN,
+            "equivariant": cnn_small.equivariant_CNN,
+            "lorentz_equivariant": cnn_small.Lorentz_equivariant_CNN,
+        }
+    elif cnn_size == "big":
+        return {
+            "lorentz": cnn_big.Lorentz_CNN,
+            "euclidean": cnn_big.EUCLIDEAN_CNN,
+            "equivariant": cnn_big.equivariant_CNN,
+            "lorentz_equivariant": cnn_big.Lorentz_equivariant_CNN,
+        }
+    else:
+        # fallback to normal cnn_experiment
+        return {
+            "lorentz": cnn_normal.Lorentz_CNN,
+            "euclidean": cnn_normal.EUCLIDEAN_CNN,
+            "equivariant": cnn_normal.equivariant_CNN,
+            "lorentz_equivariant": cnn_normal.Lorentz_equivariant_CNN,
+        }
 
 # Define decoder mappings
 EUCLIDEAN_DECODER = {'mlr': nn.Linear}
@@ -25,12 +43,13 @@ LORENTZ_DECODER = {'mlr': LorentzMLR}
 POINCARE_DECODER = {'mlr': UnidirectionalPoincareMLR}
 
 class CNNClassifier(nn.Module):
-    def __init__(self, enc_type="lorentz", dec_type="lorentz", enc_kwargs={}, dec_kwargs={}):
+    def __init__(self, enc_type="lorentz", dec_type="lorentz", cnn_size ="",enc_kwargs={}, dec_kwargs={}):
         super(CNNClassifier, self).__init__()
 
         self.enc_type = enc_type
         self.dec_type = dec_type
         self.clip_r = dec_kwargs.get('clip_r', 1.0)  # Set default if not provided
+        CNN_MODEL = get_cnn_model_dict(cnn_size)
 
         # Initialize Encoder (CNN)
         if enc_type not in CNN_MODEL:

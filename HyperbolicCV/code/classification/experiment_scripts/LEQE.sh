@@ -5,7 +5,7 @@
 #SBATCH --job-name=LEQE-training
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-#SBATCH --time=10:00:00
+#SBATCH --time=8:00:00
 #SBATCH --output=slurm_output/train_LEQECNN_%j.out
 
 # Parse input args
@@ -31,6 +31,10 @@ while [[ $# -gt 0 ]]; do
       EQ_TYPE="$2"
       shift 2
       ;;
+    --cnn_size)       # <-- Added this
+      CNN_SIZE="$2"
+      shift 2
+      ;;
     --checkpoint)
       CHECKPOINT_PATH="$2"
       shift 2
@@ -44,14 +48,15 @@ done
 
 # Check required args
 if [ -z "$CONFIG" ] || [ -z "$DATASET" ]; then
-  echo "Usage: $0 --config <config_file> --dataset <dataset_name> [--device <device>] [--num_epochs <epochs>] [--equivariant_type <type>]"
+  echo "Usage: $0 --config <config_file> --dataset <dataset_name> [--device <device>] [--num_epochs <epochs>] [--equivariant_type <type>] [--cnn_size <size>]"
   exit 1
 fi
 
 # Default values
 DEVICE=${DEVICE:-cuda:0}
-NUM_EPOCHS=${NUM_EPOCHS:-60}
+NUM_EPOCHS=${NUM_EPOCHS:-200}
 EQ_TYPE=${EQ_TYPE:-P4}
+CNN_SIZE=${CNN_SIZE:-normal}   # <-- default cnn_size if not set
 
 module purge
 module load 2023
@@ -64,12 +69,11 @@ pip install h5py
 
 OUTPUT_PATH="/home/cfeng/HyperbolicCV/code/classification/output"
 
-
-
 python HyperbolicCV/code/classification/train.py -c "$CONFIG" \
   --output_dir "$OUTPUT_PATH" \
   --device "$DEVICE" \
   --dataset "$DATASET" \
   --num_epochs "$NUM_EPOCHS" \
   --equivariant_type "$EQ_TYPE" \
-  --load_checkpoint "$CHECKPOINT_PATH"
+  --cnn_size "$CNN_SIZE" \
+  # --load_checkpoint "$CHECKPOINT_PATH"

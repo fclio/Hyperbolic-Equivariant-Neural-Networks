@@ -40,6 +40,9 @@ def structure_training_images(train_dir):
     for dir in class_dirs:
         shutil.move(dir, img_dir)
 
-
-structure_validation_images("data/tiny-imagenet-200/val")
-structure_training_images("data/tiny-imagenet-200/train")
+data_dir = "/projects/prjs1590/data"
+val = os.path.join( data_dir, "tiny-imagenet-200/val")
+train = os.path.join( data_dir, "tiny-imagenet-200/train")
+print(val)
+structure_validation_images(val)
+structure_training_images(train)

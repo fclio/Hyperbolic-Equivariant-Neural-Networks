@@ -1,5 +1,5 @@
-mkdir -p data
-cd data/
+mkdir -p /projects/prjs1590/data
+cd /projects/prjs1590/data
 
 # Retrieve data directly from Stanford data source
 if ! wget http://cs231n.stanford.edu/tiny-imagenet-200.zip

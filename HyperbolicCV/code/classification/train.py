@@ -99,12 +99,16 @@ def getArguments():
     parser.add_argument('--equivariant_type', default=None, type=str, choices=[ "P4", "P4M"],
                     help="Select conv model encoder manifold.")
 
-    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v2_2","v2_3","v7","v8","v4_3_1","v4_3_2","v4_1_3_1","v4_1_3_2","v4_2_3_1","v4_2_3_2"],
+    parser.add_argument('--exp_v', default="", type=str, choices=["v2","v3_1", "v3_2","v3","v4_1", "v4_2","v4", "v5", "v6","v6_1","v2_1","v2_2","v2_3","v7","v8","v4_3_1","v4_3_2","v4_1_3_1","v4_1_3_2","v4_2_3_1","v4_2_3_2","v3_4"],
                     help="experiment_version")
 
     # Dataset settings
     parser.add_argument('--dataset', default='CIFAR-100', type=str,
                         choices=["MNIST", "CIFAR-10", "CIFAR-100", "Tiny-ImageNet", "MNIST_rotation", "MNIST_rot", "CIFAR-10_rot", "CIFAR-100_rot","cifar100-lt", "CUB-200", "cifar10-lt","Flower102","Food101","CelebA","iNaturalist", "LFWPeople","PCAM", "SUN397", "PET","DTD"],
+                        help="Select a dataset.")
+
+    parser.add_argument('--cnn_size', default="", type=str,
+                        choices=["small", "big", "normal"],
                         help="Select a dataset.")
 
 
@@ -187,9 +191,14 @@ def main(args):
     print(args)
 
     if args.equivariant_type is not None:
-        output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}_{args.equivariant_type}")
+        if args.cnn_size == "" or args.cnn_size =="normal":
+            output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}_{args.equivariant_type}")
+        else:
+            output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}_{args.equivariant_type}_{args.cnn_size}")
     else:
         output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}")
+
+    
 
     if output_dir is not None:
         if not os.path.exists(output_dir):
@@ -213,7 +222,7 @@ def main(args):
 
     start_epoch = 0
 
-    
+
 
     if args.load_checkpoint is not None:
         print("Loading model checkpoint from {}".format(args.load_checkpoint))
@@ -222,9 +231,9 @@ def main(args):
         with torch.no_grad():
             loss_val, acc1_val, acc5_val = evaluate(model, val_loader, criterion, device)
         print(f"Sanity check after loading: Val Acc@1 = {acc1_val}")
-        
+
     model = DataParallel(model, device_ids=args.device)
-    
+
 
     if args.compile:
         model = torch.compile(model)
@@ -304,7 +313,7 @@ def main(args):
 
 
             # Testing for best model
-            if (epoch in [1, 25, 43, 50, 65, 70, 80,100, 135, 150,  165, 170,180, 190]) or args.dataset == "Food101" or args.dataset == "PCAM":
+            if (epoch in [1, 25, 43, 50, 65, 70, 80,100, 135, 150,  165, 170,180, 190]) or args.dataset == "Food101" or args.dataset == "PCAM"or args.dataset == "SUN397":
                 # dede
                 if args.output_dir is not None:
                     save_path = output_dir + "/step_model.pth"

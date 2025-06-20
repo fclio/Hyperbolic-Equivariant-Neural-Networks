@@ -97,7 +97,7 @@ def visalize_group_feature(x, save_path, name="", model_type=""):
         visalize_group_EQE(x,save_path,name,grid_rows=2, grid_cols=4,model_type=model_type)
     elif model_type == "LEQE-CNN-2":
         x = x.permute(3, 0, 1, 2)  # (C, 8, H, W)
-        visalize_group_EQE(x,save_path,name,grid_rows=2, grid_cols=4,model_type=model_type)
+        visalize_group_EQE(x,save_path,name,grid_rows=1, grid_cols=4,model_type=model_type)
     elif model_type == "L-CNN" or  model_type == "E-CNN" :
         visalize_group_single(x,save_path, name)
 
@@ -116,13 +116,18 @@ def visalize_group_LEQE(x, save_path, name="", grid_rows=2, grid_cols=4, model_t
     # Pass time_component as optional image
     visalize_group_EQE(spatial_reshaped, save_path, name=name, grid_rows=grid_rows, grid_cols=grid_cols, model_type=model_type, time_image=time_component)
 
-def visalize_group_EQE(x, save_path, name="", grid_rows=3, grid_cols=3, model_type="", time_image=None):
+def visalize_group_EQE(x, save_path, name="", grid_rows=3, grid_cols=3, model_type="", time_image=None,eq_type="P4"):
     """
     Combine 8 group spatial maps (+ optional time image) into one big image with labels.
     """
-    labels = [
-        "0°", "90°", "180°", "270°",
-        "reflection", "reflection+90°", "reflection+180°", "reflection+270°"
+    if eq_type =="P4M":
+        labels = [
+            "0°", "90°", "180°", "270°",
+            "reflection", "reflection+90°", "reflection+180°", "reflection+270°"
+        ]
+    else:
+        labels = [
+        "0°", "90°", "180°", "270°"
     ]
 
 
@@ -133,7 +138,7 @@ def visalize_group_EQE(x, save_path, name="", grid_rows=3, grid_cols=3, model_ty
     # --- Add spatial group maps ---
     x_reordered = x.permute(1, 0, 2, 3)  # (8, C, H, W)
 
-    for i in range(8):
+    for i in range(len(labels)):
         img = visualize_feature_maps_to_image(x_reordered[i])
         labeled = Image.new("RGB", (img.width, img.height + label_height), "white")
         labeled.paste(img, (0, label_height))
@@ -179,7 +184,9 @@ def visalize_group_EQE(x, save_path, name="", grid_rows=3, grid_cols=3, model_ty
     # --- Grid layout ---
     img_w, img_h = imgs[0].size
     num_imgs = len(imgs)
-    grid_cols = math.ceil(math.sqrt(num_imgs))
+    # grid_cols = math.ceil(math.sqrt(num_imgs))
+    # grid_rows = math.ceil(num_imgs / grid_cols)
+    grid_cols = len(labels)
     grid_rows = math.ceil(num_imgs / grid_cols)
 
     grid_img = Image.new("RGB", (grid_cols * img_w, grid_rows * img_h), color='white')
@@ -259,7 +266,7 @@ def visualize_single_feature_maps(tensor, name ="image", cols=8, cmap='viridis',
     plt.show()
 
 
-def visualize_equivariance(original_outputs, transformed_outputs, transformations, reflections,  save_path, channel_idx=0, num_transformation=8,model_type=""):
+def visualize_equivariance(original_outputs, transformed_outputs, transformations, reflections,  save_path, channel_idx=0, num_transformation=4,model_type=""):
     """
     Visualizes multiple channels of original and transformed outputs for different transformations.
     """

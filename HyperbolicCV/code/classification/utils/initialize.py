@@ -6,12 +6,27 @@ from torch.utils.data import ConcatDataset
 from lib.geoopt import ManifoldParameter
 from lib.geoopt.optim import RiemannianAdam, RiemannianSGD
 from torch.optim.lr_scheduler import MultiStepLR
-
+import os
 from classification.models.classifier_resnet import ResNetClassifier
 
-from classification.models.classifier_cnn import CNNClassifier
+from classification.models.classifier_cnn_experiment import CNNClassifier
 
 from classification.utils.dataset import Dataset, CIFAR100LT, save_image, CIFAR10LT, TransformedSubset
+
+
+from openood.preprocessors import BasePreprocessor
+
+class OpenOODCIFARPreprocessor(BasePreprocessor):
+    def __init__(self):
+        self.transform = transforms.Compose([
+            transforms.Resize(32),
+            transforms.CenterCrop(32),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.5074, 0.4867, 0.4411),
+                std=(0.267, 0.256, 0.276)
+            )
+        ])
 
 
 def load_checkpoint(model, optimizer, lr_scheduler, device, args):
@@ -21,7 +36,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, device, args):
         checkpoint = torch.load(args.load_checkpoint, map_location=device, weights_only=False)
     else:
         checkpoint = torch.load(args.load_checkpoint, map_location=device)
-    
+
     model = model.to(device)
     model.load_state_dict(checkpoint['model'])
 
@@ -121,6 +136,7 @@ def select_model(img_dim, num_classes, args):
         model = CNNClassifier(
             enc_type=args.encoder_manifold,
             dec_type=args.decoder_manifold,
+            cnn_size=args.cnn_size,
             enc_kwargs=enc_args,
             dec_kwargs=dec_args
         )
@@ -190,7 +206,7 @@ def get_param_groups(model, lr_manifold, weight_decay_manifold):
 
     return parameters
 
-def select_dataset(args, validation_split=True):
+def select_dataset(args, validation_split=True,data_dir = '/projects/prjs1590/data'):
     """ Selects an available dataset and returns PyTorch dataloaders for training, validation and testing. """
 
     if args.dataset == 'MNIST':
@@ -205,10 +221,10 @@ def select_dataset(args, validation_split=True):
             transforms.Resize((32,32), antialias=None)
         ])
 
-        train_set = datasets.MNIST('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.MNIST(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [50000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.MNIST('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.MNIST(root=data_dir, train=False, download=True, transform=test_transform)
 
         img_dim = [1, 32, 32]
         num_classes = 10
@@ -227,10 +243,10 @@ def select_dataset(args, validation_split=True):
             transforms.Resize((32,32), antialias=None)
         ])
 
-        train_set = datasets.MNIST('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.MNIST(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [50000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.MNIST('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.MNIST(root=data_dir, train=False, download=True, transform=test_transform)
 
         img_dim = [1, 32, 32]
         num_classes = 10
@@ -248,10 +264,10 @@ def select_dataset(args, validation_split=True):
             transforms.Resize((32,32), antialias=None)
         ])
 
-        train_set = datasets.MNIST('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.MNIST(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [50000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.MNIST('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.MNIST(root=data_dir, train=False, download=True, transform=test_transform)
 
         img_dim = [1, 32, 32]
         num_classes = 10
@@ -269,10 +285,10 @@ def select_dataset(args, validation_split=True):
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
 
-        train_set = datasets.CIFAR10('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.CIFAR10('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=test_transform)
 
         img_dim = [3, 32, 32]
         num_classes = 10
@@ -290,10 +306,10 @@ def select_dataset(args, validation_split=True):
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
 
-        train_set = datasets.CIFAR10('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.CIFAR10('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=test_transform)
 
         img_dim = [3, 32, 32]
         num_classes = 10
@@ -311,10 +327,10 @@ def select_dataset(args, validation_split=True):
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
 
-        train_set = datasets.CIFAR100('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.CIFAR100(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.CIFAR100('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.CIFAR100(root=data_dir, train=False, download=True, transform=test_transform)
 
 
         img_dim = [3, 32, 32]
@@ -333,20 +349,20 @@ def select_dataset(args, validation_split=True):
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
 
-        train_set = datasets.CIFAR100('data', train=True, download=True, transform=train_transform)
+        train_set = datasets.CIFAR100(root=data_dir, train=True, download=True, transform=train_transform)
         if validation_split:
             train_set, val_set = torch.utils.data.random_split(train_set, [40000, 10000], generator=torch.Generator().manual_seed(1))
-        test_set = datasets.CIFAR100('data', train=False, download=True, transform=test_transform)
+        test_set = datasets.CIFAR100(root=data_dir, train=False, download=True, transform=test_transform)
 
         img_dim = [3, 32, 32]
         num_classes = 100
 
     elif args.dataset == 'Tiny-ImageNet':
-        root_dir = "classification/data/tiny-imagenet-200/"
-        train_dir = root_dir + "train/images"
-        val_dir = root_dir + "val/images"
-        test_dir = root_dir + "val/images" # TODO: No labels for test were given, so treat validation as test
-
+        root_dir = os.path.join( data_dir, "tiny-imagenet-200")
+        train_dir = os.path.join( root_dir , "train/images")
+        val_dir = os.path.join(root_dir , "val/images")
+        test_dir = os.path.join(root_dir , "val/images") # TODO: No labels for test were given, so treat validation as test
+        print(train_dir)
         train_transform=transforms.Compose([
             transforms.RandomCrop(64, padding=4),
             transforms.RandomHorizontalFlip(),
@@ -390,7 +406,7 @@ def select_dataset(args, validation_split=True):
 
         # Load the dataset with the desired imbalance factor
         # Options for config_name: 'r-10' (imbalance factor 10), 'r-100' (imbalance factor 100)
-        dataset = load_dataset("tomas-gajarsky/cifar100-lt", name="r-100")
+        dataset = load_dataset("tomas-gajarsky/cifar100-lt", name="r-100",cache_dir=data_dir)
 
         # Create training and test datasets
         train_set = CIFAR100LT(dataset['train'], transform=train_transform)
@@ -422,7 +438,7 @@ def select_dataset(args, validation_split=True):
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
 
-        dataset = load_dataset("tomas-gajarsky/cifar10-lt", name="r-10")
+        dataset = load_dataset("tomas-gajarsky/cifar10-lt", name="r-10",cache_dir=data_dir)
 
         # Create training and test datasets
         train_set = CIFAR10LT(dataset['train'], transform=train_transform)
@@ -459,7 +475,7 @@ def select_dataset(args, validation_split=True):
             transforms.ToTensor(),
             transforms.Normalize((0.5074, 0.4867, 0.4411), (0.267, 0.256, 0.276)),
         ])
-        dataset = load_dataset("Mobulan/CUB-200-2011")
+        dataset = load_dataset("Mobulan/CUB-200-2011",cache_dir=data_dir)
         # dataset = load_dataset("Donghyun99/CUB-200-2011")
         # dataset = load_dataset("GATE-engine/cubirds200")
         # train_set = Dataset(dataset['train'], transform=train_transform)
@@ -517,9 +533,9 @@ def select_dataset(args, validation_split=True):
             ),
         ])
 
-        train_set = datasets.Flowers102(root='data', split='train', download=True, transform=train_transform)
-        val_set = datasets.Flowers102(root='data', split='val', download=True, transform=test_transform)
-        test_set = datasets.Flowers102(root='data', split='test', download=True, transform=test_transform)
+        train_set = datasets.Flowers102(root=data_dir, split='train', download=True, transform=train_transform)
+        val_set = datasets.Flowers102(root=data_dir, split='val', download=True, transform=test_transform)
+        test_set = datasets.Flowers102(root=data_dir, split='test', download=True, transform=test_transform)
 
         img_dim = [3, 224, 224]
         num_classes = 102
@@ -557,9 +573,9 @@ def select_dataset(args, validation_split=True):
         ])
 
 
-        train_set = datasets.Food101(root='data', split='train', download=True, transform=train_transform)
-        val_set = datasets.Food101(root='data', split='test', download=True, transform=val_transform)
-        test_set = datasets.Food101(root='data', split='test', download=True, transform=test_transform)
+        train_set = datasets.Food101(root=data_dir, split='train', download=True, transform=train_transform)
+        val_set = datasets.Food101(root=data_dir, split='test', download=True, transform=val_transform)
+        test_set = datasets.Food101(root=data_dir, split='test', download=True, transform=test_transform)
 
         img_dim = [3, 224, 224]
         num_classes = 101
@@ -596,9 +612,9 @@ def select_dataset(args, validation_split=True):
             ),
         ])
 
-        train_set = datasets.CelebA(root='data', split='valid', download=True, transform=train_transform)
-        val_set = datasets.CelebA(root='data', split='test', download=True, transform=val_transform)
-        test_set = datasets.CelebA(root='data', split='test', download=True, transform=test_transform)
+        train_set = datasets.CelebA(root=data_dir, split='valid', download=True, transform=train_transform)
+        val_set = datasets.CelebA(root=data_dir, split='test', download=True, transform=val_transform)
+        test_set = datasets.CelebA(root=data_dir, split='test', download=True, transform=test_transform)
 
         img_dim = [3, 224, 224]
         num_classes = 40   # CelebA has 40 attribute labels (not classic classes)
@@ -635,7 +651,7 @@ def select_dataset(args, validation_split=True):
         ])
 
         full_dataset = datasets.INaturalist(
-            root='data',
+            root=data_dir,
             version='2021_valid',
             download=True,
             transform=None,
@@ -676,7 +692,7 @@ def select_dataset(args, validation_split=True):
                 transforms.ToTensor(),
             ])
 
-            train_set = datasets.PCAM(root='/projects/prjs1590/data', split='train', transform=train_transform, download=True)
+            train_set = datasets.PCAM(root=data_dir, split='train', transform=train_transform, download=True)
             # if validation_split:
             #     # You can split 70k train -> 60k train / 10k val (or adapt sizes to your memory/quota)
             #     train_set, val_set = torch.utils.data.random_split(
@@ -686,9 +702,9 @@ def select_dataset(args, validation_split=True):
             #     )
             # else:
 
-            val_set = datasets.PCAM(root='/projects/prjs1590/data', split='val', transform=val_transform, download=True)
+            val_set = datasets.PCAM(root=data_dir, split='val', transform=val_transform, download=True)
 
-            test_set = datasets.PCAM(root='/projects/prjs1590/data', split='test', transform=test_transform, download=True)
+            test_set = datasets.PCAM(root=data_dir, split='test', transform=test_transform, download=True)
 
             img_dim = [3, 96, 96]
             num_classes = 2  # Binary classification: tumor vs non-tumor
@@ -724,7 +740,7 @@ def select_dataset(args, validation_split=True):
         ])
 
         # Load full dataset (download=True if not downloaded)
-        full_dataset = datasets.SUN397(root='/projects/prjs1590/data', transform=None, download=True)
+        full_dataset = datasets.SUN397(root=data_dir, transform=None, download=True)
 
         # Decide split sizes
         total_len = len(full_dataset)
@@ -769,7 +785,7 @@ def select_dataset(args, validation_split=True):
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                 std=[0.229, 0.224, 0.225]),
         ])
-        data_dir = '/projects/prjs1590/data'
+
 
         train_set = datasets.OxfordIIITPet(
             root=data_dir, split='trainval', target_types='category',
@@ -801,7 +817,7 @@ def select_dataset(args, validation_split=True):
                 std=[0.229, 0.224, 0.225]
             ),
         ])
-        
+
         val_transform = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),  # deterministic crop
@@ -819,7 +835,7 @@ def select_dataset(args, validation_split=True):
                                 std=[0.229, 0.224, 0.225])
         ])
 
-        data_dir = '/projects/prjs1590/data'
+
         # Load DTD with 'train', 'val', and 'test' splits
         train_set_2 = datasets.DTD(root=data_dir, split='train', transform=train_transform, download=True)
         train_set_1 = datasets.DTD(root=data_dir, split='val', transform=test_transform, download=True)
