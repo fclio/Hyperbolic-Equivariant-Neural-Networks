@@ -190,7 +190,10 @@ def main(args):
     print("Arguments:")
     print(args)
 
-    if args.equivariant_type is not None:
+    if args.embedding_dim != 512 and args.equivariant_type is not None:
+        output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}_{args.equivariant_type}_dim:{args.embedding_dim}")
+
+    elif args.equivariant_type is not None:
         if args.cnn_size == "" or args.cnn_size =="normal":
             output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}_{args.equivariant_type}")
         else:
@@ -198,7 +201,7 @@ def main(args):
     else:
         output_dir = os.path.join(args.output_dir, f"{args.exp_name}_{args.dataset}_epoch:{args.num_epochs}")
 
-    
+
 
     if output_dir is not None:
         if not os.path.exists(output_dir):
@@ -224,7 +227,7 @@ def main(args):
 
 
 
-    if args.load_checkpoint is not None:
+    if args.load_checkpoint is not None and args.load_checkpoint != "":
         print("Loading model checkpoint from {}".format(args.load_checkpoint))
         model, optimizer, lr_scheduler, start_epoch = load_checkpoint(model, optimizer, lr_scheduler, device, args)
         model.eval()

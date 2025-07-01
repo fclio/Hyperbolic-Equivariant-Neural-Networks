@@ -23,7 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from utils.initialize import select_dataset, select_model, load_model_checkpoint, OpenOODCIFARPreprocessor
+from utils.initialize import select_dataset, select_model, load_model_checkpoint
 from lib.utils.visualize import visualize_embeddings
 from train import evaluate
 
@@ -36,6 +36,9 @@ from openood.evaluation_api import Evaluator
 
 
 import torchvision.transforms as transforms
+from openood.preprocessors import BasePreprocessor
+
+
 
 
 def getArguments():
@@ -147,6 +150,7 @@ def main(args):
     print("Creating model...")
     model = select_model(img_dim, num_classes, args)
     model = model.to(device)
+    
     print('-> Number of model params: {} (trainable: {})'.format(
         sum(p.numel() for p in model.parameters()),
         sum(p.numel() for p in model.parameters() if p.requires_grad),
@@ -158,9 +162,19 @@ def main(args):
         model = load_model_checkpoint(model, args.load_checkpoint)
     else:
         print("No model checkpoint given. Using random weights.")
-
+    print("device ids", args.device)
     model = DataParallel(model, device_ids=args.device)
+    model = model.cuda() 
     model.eval()
+    model.to(device)
+
+    # for memory problem, first increase gpu in partion, then use this: for the amount of gpu used
+    # device_ids = ["cuda:0", "cuda:1","cuda:2"]
+    # device = torch.device( device_ids[0])
+
+    # model = model.to(device)  # Move model to first GPU
+    # model = torch.nn.DataParallel(model, device_ids=device_ids)
+    # model.eval()
 
     if args.mode=="test_accuracy":
         print("Testing accuracy of model...")
@@ -257,7 +271,17 @@ def main(args):
         save_results_as_json(results, output_path)
 
 
-
+class OpenOODCIFARPreprocessor(BasePreprocessor):
+    def __init__(self):
+        self.transform = transforms.Compose([
+            transforms.Resize(32),
+            transforms.CenterCrop(32),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.5074, 0.4867, 0.4411),
+                std=(0.267, 0.256, 0.276)
+            )
+        ])
 @torch.no_grad()
 def save_embeddings(model, data_loader, output_path, device):
     fig = visualize_embeddings(model, data_loader, device, model.module.dec_manifold, model.module.dec_type=="poincare")
@@ -265,7 +289,7 @@ def save_embeddings(model, data_loader, output_path, device):
     fig.savefig(output_path)
     plt.close(fig)
 
-
+# [0.8/255, 1.6/255, 3.2/255]
 def adversarial_attack(attack, model, device, data_loader, epsilons=[0.8/255, 1.6/255, 3.2/255]):
     """ Runs adversarial attacks with different epsilon parameters.
     """
@@ -284,14 +308,17 @@ def adversarial_attack(attack, model, device, data_loader, epsilons=[0.8/255, 1.
 def run_attack(attack, model, device, data_loader, epsilon, iters=7):
     """ Runs adversarial attacks for a single epsilon parameter.
     """
+    model.eval()
+ 
+
     acc1 = AverageMeter("Acc@1", ":6.2f")
     acc5 = AverageMeter("Acc@5", ":6.2f")
 
     criterion = torch.nn.CrossEntropyLoss()
 
-    for x, target in tqdm(data_loader):
+    for i, (x, target) in enumerate(data_loader):
         x, target = x.to(device), target.to(device)
-        x_in = x.data
+        x_in = x.detach()
 
         for _ in range(iters):
             x.requires_grad = True

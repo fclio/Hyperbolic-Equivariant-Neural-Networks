@@ -14,19 +14,6 @@ from classification.models.classifier_cnn_experiment import CNNClassifier
 from classification.utils.dataset import Dataset, CIFAR100LT, save_image, CIFAR10LT, TransformedSubset
 
 
-from openood.preprocessors import BasePreprocessor
-
-class OpenOODCIFARPreprocessor(BasePreprocessor):
-    def __init__(self):
-        self.transform = transforms.Compose([
-            transforms.Resize(32),
-            transforms.CenterCrop(32),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.5074, 0.4867, 0.4411),
-                std=(0.267, 0.256, 0.276)
-            )
-        ])
 
 
 def load_checkpoint(model, optimizer, lr_scheduler, device, args):

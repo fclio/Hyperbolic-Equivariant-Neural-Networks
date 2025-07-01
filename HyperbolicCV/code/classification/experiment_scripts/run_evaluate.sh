@@ -1,18 +1,18 @@
 modes=(
   # "test_accuracy"
-  # "visualize_embeddings"
+  "visualize_embeddings"
   # "fgsm"
   # "pgd"
   # "test_equivairant"
-  "test_openood"
+  # "test_openood"
 )
 
 configs=(
-  "E-CNN"
-  "EQE-CNN"
+  # "E-CNN"
+  # "EQE-CNN"
   "L-CNN"
-  "LEQE-CNN-3_1"
-  "LEQE-CNN-3_4"
+  # "LEQE-CNN-3_1"
+  # "LEQE-CNN-3_4"
   # "LEQE-CNN-4_3_1"
   # "LEQE-CNN-4_1_3_1"
   # "LEQE-CNN-4_2_3_1"
@@ -26,18 +26,18 @@ configs=(
 
 datasets=(
   # "Flower102"
-  "CIFAR-10_rot"
-  "CIFAR-100_rot"
+  #   "CUB-200"
+      # "SUN397"
+  # "CIFAR-10_rot"
+  # "CIFAR-100_rot"
   # "MNIST_rot"
   # "cifar100-lt"
   # "cifar10-lt"
   # "Tiny-ImageNet"
   # "CUB-200"
-  # "Flower102"
   # "Food101"
-  # "PCAM"
+  "PCAM"
   # "PET"
-  # "SUN397"
   # "DTD"
 )
 
@@ -64,7 +64,7 @@ for mode in "${modes[@]}"; do
         --dataset "$dataset" \
         --load_checkpoint "$CHECKPOINT_PATH" \
         --output_dir "$OUTPUT_PATH"
-        
+
     done
   done
 done

@@ -2,11 +2,13 @@
 
 #SBATCH --partition=gpu_h100
 #SBATCH --gpus=1
-#SBATCH --job-name=evaluate_equivariant
+#SBATCH --job-name=evaluate
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=3
-#SBATCH --time=1:00:00
-#SBATCH --output=slurm_output/evaluate_equivariant_%A.out
+#SBATCH --cpus-per-task=16
+#SBATCH --time=0:30:00
+#SBATCH --output=slurm_output/evaluate_%j.out
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # --- Parse input args ---
 while [[ $# -gt 0 ]]; do
@@ -38,6 +40,9 @@ module load 2024
 module load Miniconda3/24.7.1-0
 source ~/.bashrc
 conda activate py310
+pip install h5py
+pip install datasets==2.14.5
+
 
 # --- Run evaluation ---
 python HyperbolicCV/code/classification/test.py \

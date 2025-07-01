@@ -31,8 +31,12 @@ while [[ $# -gt 0 ]]; do
       EQ_TYPE="$2"
       shift 2
       ;;
-    --cnn_size)       # <-- Added this
+    --cnn_size)
       CNN_SIZE="$2"
+      shift 2
+      ;;
+    --embedding_dim)
+      EMBEDDING_DIM="$2"
       shift 2
       ;;
     --checkpoint)
@@ -48,7 +52,7 @@ done
 
 # Check required args
 if [ -z "$CONFIG" ] || [ -z "$DATASET" ]; then
-  echo "Usage: $0 --config <config_file> --dataset <dataset_name> [--device <device>] [--num_epochs <epochs>] [--equivariant_type <type>] [--cnn_size <size>]"
+  echo "Usage: $0 --config <config_file> --dataset <dataset_name> [--device <device>] [--num_epochs <epochs>] [--equivariant_type <type>] [--cnn_size <size>] [--embedding_dim <dim>] [--checkpoint <path>]"
   exit 1
 fi
 
@@ -56,7 +60,8 @@ fi
 DEVICE=${DEVICE:-cuda:0}
 NUM_EPOCHS=${NUM_EPOCHS:-200}
 EQ_TYPE=${EQ_TYPE:-P4}
-CNN_SIZE=${CNN_SIZE:-normal}   # <-- default cnn_size if not set
+CNN_SIZE=${CNN_SIZE:-normal}
+EMBEDDING_DIM=${EMBEDDING_DIM:-512}
 
 module purge
 module load 2023
@@ -69,11 +74,20 @@ pip install h5py
 
 OUTPUT_PATH="/home/cfeng/HyperbolicCV/code/classification/output"
 
-python HyperbolicCV/code/classification/train.py -c "$CONFIG" \
-  --output_dir "$OUTPUT_PATH" \
-  --device "$DEVICE" \
-  --dataset "$DATASET" \
-  --num_epochs "$NUM_EPOCHS" \
-  --equivariant_type "$EQ_TYPE" \
-  --cnn_size "$CNN_SIZE" \
-  # --load_checkpoint "$CHECKPOINT_PATH"
+# Construct command
+CMD="python HyperbolicCV/code/classification/train.py -c \"$CONFIG\" \
+  --output_dir \"$OUTPUT_PATH\" \
+  --device \"$DEVICE\" \
+  --dataset \"$DATASET\" \
+  --num_epochs \"$NUM_EPOCHS\" \
+  --equivariant_type \"$EQ_TYPE\" \
+  --cnn_size \"$CNN_SIZE\" \
+  --embedding_dim \"$EMBEDDING_DIM\""
+
+# Add checkpoint option if provided
+if [ -n "$CHECKPOINT_PATH" ]; then
+  CMD+=" --load_checkpoint \"$CHECKPOINT_PATH\""
+fi
+
+# Run command
+eval $CMD
